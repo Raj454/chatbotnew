@@ -335,8 +335,7 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
         throw new Error('Base product has no variants');
       }
 
-      // Build cart URL with line item properties
-      // Format: /cart/add?id=VARIANT_ID&quantity=1&properties[key]=value
+      // Build cart/add URL with line item properties and redirect to checkout
       const cartParams = new URLSearchParams();
       cartParams.append('id', variantId.toString());
       cartParams.append('quantity', '1');
@@ -346,8 +345,9 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
       cartParams.append('properties[Ingredients]', ingredientsList);
       if (sweetener) cartParams.append('properties[Sweetener]', sweetener);
       if (flavors) cartParams.append('properties[Flavors]', flavors);
+      // After adding to cart, redirect directly to checkout
+      cartParams.append('return_to', '/checkout');
 
-      // Direct to cart then checkout
       const checkoutUrl = `https://${cleanUrl}/cart/add?${cartParams.toString()}`;
 
       console.log('Cart checkout URL created for variant:', variantId);
