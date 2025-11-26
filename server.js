@@ -312,7 +312,7 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
     if (flavors) formulaNote += `Flavors: ${flavors}\n`;
     formulaNote += `Ingredients: ${ingredientsList}`;
 
-    // If base product ID is set, create a draft order
+    // If base product ID is set, create cart URL with line item properties
     if (baseProductId) {
       // First, get the base product's variant ID
       const productUrl = `https://${cleanUrl}/admin/api/2024-01/products/${baseProductId}.json`;
@@ -335,51 +335,27 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
         throw new Error('Base product has no variants');
       }
 
-      // Create draft order with formula note
-      const draftOrderData = {
-        draft_order: {
-          line_items: [{
-            variant_id: variantId,
-            quantity: 1,
-            properties: [
-              { name: 'Formula Name', value: formulaName },
-              { name: 'Format', value: format },
-              { name: 'Goal', value: goal || 'Wellness' },
-              { name: 'Ingredients', value: ingredientsList },
-              ...(sweetener ? [{ name: 'Sweetener', value: sweetener }] : []),
-              ...(flavors ? [{ name: 'Flavors', value: flavors }] : [])
-            ]
-          }],
-          note: formulaNote,
-          tags: 'custom-formula, craffteine'
-        }
-      };
+      // Build cart URL with line item properties
+      // Format: /cart/add?id=VARIANT_ID&quantity=1&properties[key]=value
+      const cartParams = new URLSearchParams();
+      cartParams.append('id', variantId.toString());
+      cartParams.append('quantity', '1');
+      cartParams.append('properties[Formula Name]', formulaName);
+      cartParams.append('properties[Format]', format);
+      cartParams.append('properties[Goal]', goal || 'Wellness');
+      cartParams.append('properties[Ingredients]', ingredientsList);
+      if (sweetener) cartParams.append('properties[Sweetener]', sweetener);
+      if (flavors) cartParams.append('properties[Flavors]', flavors);
 
-      const draftOrderUrl = `https://${cleanUrl}/admin/api/2024-01/draft_orders.json`;
-      const draftResponse = await fetch(draftOrderUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': accessToken
-        },
-        body: JSON.stringify(draftOrderData)
-      });
+      // Direct to cart then checkout
+      const checkoutUrl = `https://${cleanUrl}/cart/add?${cartParams.toString()}`;
 
-      if (!draftResponse.ok) {
-        const errorText = await draftResponse.text();
-        console.error('Draft order creation failed:', draftResponse.status, errorText);
-        throw new Error(`Failed to create draft order: ${draftResponse.status}`);
-      }
-
-      const draftResult = await draftResponse.json();
-      const checkoutUrl = draftResult.draft_order.invoice_url;
-
-      console.log('Draft order created:', draftResult.draft_order.id);
+      console.log('Cart checkout URL created for variant:', variantId);
 
       res.json({ 
         success: true, 
         checkoutUrl,
-        orderId: draftResult.draft_order.id,
+        variantId,
         formulaNote
       });
     } else {
