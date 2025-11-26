@@ -468,7 +468,7 @@ const App: React.FC = () => {
                     });
                     console.log('✅ Formula saved to database');
                     
-                    // Create product in Shopify
+                    // Create checkout with base product in Shopify
                     const lastBotMessage = messages[messages.length - 1];
                     const ingredients = lastBotMessage?.ingredients?.map(ing => {
                         let dosageValue = ing.suggested;
@@ -486,7 +486,7 @@ const App: React.FC = () => {
                         };
                     }) || [];
                     
-                    const shopifyResponse = await fetch('/api/shopify/products', {
+                    const shopifyResponse = await fetch('/api/shopify/checkout', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -502,12 +502,12 @@ const App: React.FC = () => {
                     
                     const shopifyData = await shopifyResponse.json();
                     
-                    if (shopifyData.success && shopifyData.productUrl) {
-                        console.log('✅ Shopify product created:', shopifyData.productUrl);
-                        setProceedUrl(shopifyData.productUrl);
+                    if (shopifyData.success && shopifyData.checkoutUrl) {
+                        console.log('✅ Shopify checkout created:', shopifyData.checkoutUrl);
+                        setProceedUrl(shopifyData.checkoutUrl);
                     } else {
-                        console.error('⚠️ Shopify product creation failed:', shopifyData.error);
-                        setProceedUrl(`https://crafftein.myshopify.com/products/customize-crafttein-formula?${queryParams.toString()}`);
+                        console.error('⚠️ Shopify checkout creation failed:', shopifyData.error);
+                        setProceedUrl(`https://crafftein.myshopify.com/products/customize-crafftein-formula?${queryParams.toString()}`);
                     }
                 } catch (error) {
                     console.error('⚠️ Error saving formula:', error);

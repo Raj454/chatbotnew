@@ -275,11 +275,12 @@ app.get('/api/shopify/test', apiLimiter, async (req, res) => {
   }
 });
 
-// Create product in Shopify
-app.post('/api/shopify/products', apiLimiter, async (req, res) => {
+// Create checkout with base product and formula notes
+app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
   try {
     const storeUrl = process.env.SHOPIFY_STORE_URL;
     const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
+    const baseProductId = process.env.SHOPIFY_BASE_PRODUCT_ID;
 
     if (!storeUrl || !accessToken) {
       return res.status(400).json({ 
@@ -299,89 +300,116 @@ app.post('/api/shopify/products', apiLimiter, async (req, res) => {
 
     const cleanUrl = storeUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     
-    // Generate SKU
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const nameCode = formulaName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase();
-    const sku = `CRFT-${nameCode}-${timestamp}`;
-
-    // Generate product description
+    // Build formula note text
     const ingredientsList = ingredients.map(ing => 
-      `<li><strong>${ing.name}</strong>: ${ing.dosage}${ing.unit}</li>`
-    ).join('\n');
+      `${ing.name}: ${ing.dosage}${ing.unit}`
+    ).join(', ');
 
-    let description = `<div class="custom-formula">`;
-    description += `<h3>Your Personalized ${goal || 'Wellness'} Formula</h3>`;
-    description += `<p><strong>Format:</strong> ${format}</p>`;
-    if (sweetener) description += `<p><strong>Sweetener:</strong> ${sweetener}</p>`;
-    if (flavors) description += `<p><strong>Flavors:</strong> ${flavors}</p>`;
-    description += `<h4>Ingredients:</h4><ul>${ingredientsList}</ul></div>`;
+    let formulaNote = `Formula: ${formulaName}\n`;
+    formulaNote += `Format: ${format}\n`;
+    formulaNote += `Goal: ${goal || 'Wellness'}\n`;
+    if (sweetener) formulaNote += `Sweetener: ${sweetener}\n`;
+    if (flavors) formulaNote += `Flavors: ${flavors}\n`;
+    formulaNote += `Ingredients: ${ingredientsList}`;
 
-    const tags = [
-      'custom-formula',
-      'craffteine',
-      format.toLowerCase().replace(/\s+/g, '-'),
-      goal?.toLowerCase() || 'wellness'
-    ].join(', ');
+    // If base product ID is set, create a draft order
+    if (baseProductId) {
+      // First, get the base product's variant ID
+      const productUrl = `https://${cleanUrl}/admin/api/2024-01/products/${baseProductId}.json`;
+      const productResponse = await fetch(productUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': accessToken
+        }
+      });
 
-    const productData = {
-      product: {
-        title: formulaName,
-        body_html: description,
-        vendor: 'Craffteine',
-        product_type: 'Custom Formula',
-        tags,
-        variants: [{
-          title: 'Default',
-          price: '29.99',
-          sku,
-          inventory_management: null,
-          requires_shipping: true,
-          taxable: true
-        }],
-        options: [{
-          name: 'Size',
-          values: ['30 Servings']
-        }]
+      if (!productResponse.ok) {
+        throw new Error('Base product not found');
       }
-    };
 
-    const url = `https://${cleanUrl}/admin/api/2024-01/products.json`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': accessToken
-      },
-      body: JSON.stringify(productData)
-    });
+      const productData = await productResponse.json();
+      const variantId = productData.product.variants[0]?.id;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Shopify product creation failed:', response.status, errorText);
-      throw new Error(`Failed to create product: ${response.status}`);
+      if (!variantId) {
+        throw new Error('Base product has no variants');
+      }
+
+      // Create draft order with formula note
+      const draftOrderData = {
+        draft_order: {
+          line_items: [{
+            variant_id: variantId,
+            quantity: 1,
+            properties: [
+              { name: 'Formula Name', value: formulaName },
+              { name: 'Format', value: format },
+              { name: 'Goal', value: goal || 'Wellness' },
+              { name: 'Ingredients', value: ingredientsList },
+              ...(sweetener ? [{ name: 'Sweetener', value: sweetener }] : []),
+              ...(flavors ? [{ name: 'Flavors', value: flavors }] : [])
+            ]
+          }],
+          note: formulaNote,
+          tags: 'custom-formula, craffteine'
+        }
+      };
+
+      const draftOrderUrl = `https://${cleanUrl}/admin/api/2024-01/draft_orders.json`;
+      const draftResponse = await fetch(draftOrderUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': accessToken
+        },
+        body: JSON.stringify(draftOrderData)
+      });
+
+      if (!draftResponse.ok) {
+        const errorText = await draftResponse.text();
+        console.error('Draft order creation failed:', draftResponse.status, errorText);
+        throw new Error(`Failed to create draft order: ${draftResponse.status}`);
+      }
+
+      const draftResult = await draftResponse.json();
+      const checkoutUrl = draftResult.draft_order.invoice_url;
+
+      console.log('Draft order created:', draftResult.draft_order.id);
+
+      res.json({ 
+        success: true, 
+        checkoutUrl,
+        orderId: draftResult.draft_order.id,
+        formulaNote
+      });
+    } else {
+      // Fallback: redirect to base product with formula as URL params
+      const baseProductHandle = process.env.SHOPIFY_BASE_PRODUCT_HANDLE || 'customize-crafftein-formula';
+      const params = new URLSearchParams();
+      params.append('formula_name', formulaName);
+      params.append('format', format);
+      params.append('goal', goal || 'Wellness');
+      if (sweetener) params.append('sweetener', sweetener);
+      if (flavors) params.append('flavors', flavors);
+      ingredients.forEach(ing => {
+        params.append(`ingredient_${ing.name}`, `${ing.dosage}${ing.unit}`);
+      });
+
+      const checkoutUrl = `https://${cleanUrl}/products/${baseProductHandle}?${params.toString()}`;
+
+      console.log('Redirecting to base product:', checkoutUrl);
+
+      res.json({ 
+        success: true, 
+        checkoutUrl,
+        formulaNote
+      });
     }
-
-    const result = await response.json();
-    const productUrl = `https://${cleanUrl}/products/${result.product.handle}`;
-
-    console.log('Shopify product created:', result.product.id, productUrl);
-
-    res.json({ 
-      success: true, 
-      product: {
-        id: result.product.id,
-        title: result.product.title,
-        handle: result.product.handle,
-        url: productUrl
-      },
-      productUrl
-    });
   } catch (error) {
-    console.error('Error creating Shopify product:', error);
+    console.error('Error creating checkout:', error);
     res.status(500).json({ 
       success: false, 
-      error: error.message || 'Failed to create product' 
+      error: error.message || 'Failed to create checkout' 
     });
   }
 });
