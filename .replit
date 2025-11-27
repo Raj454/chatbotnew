@@ -81,6 +81,10 @@ externalPort = 3002
 localPort = 44303
 externalPort = 5173
 
+[[ports]]
+localPort = 45045
+externalPort = 6000
+
 [deployment]
 deploymentTarget = "autoscale"
 run = ["npm"]
@@ -89,4 +93,4 @@ build = ["npm", "run", "build"]
 [userenv]
 
 [userenv.shared]
-SHOPIFY_BASE_PRODUCT_ID = "8091422326818"
+SHOPIFY_BASE_PRODUCT_ID = "7687233536051"
