@@ -302,6 +302,28 @@ const App: React.FC = () => {
     initializeSession();
   }, []);
 
+  // Check for order_complete URL parameter (redirect from Shopify checkout)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderComplete = urlParams.get('order_complete');
+    
+    if (orderComplete === 'true') {
+      // Set order as confirmed
+      setOrderConfirmed(true);
+      
+      // Clean up URL without reloading
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      
+      // Add confirmation message to chat
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        text: "Your order has been confirmed! Thank you for your purchase. Your custom formula will be on its way soon.",
+        isUser: false
+      }]);
+    }
+  }, []);
+
   // Cooldown timer
   useEffect(() => {
     if (cooldownRemainingMs > 0) {

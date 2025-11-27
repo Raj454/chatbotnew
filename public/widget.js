@@ -17,6 +17,18 @@
     widgetUrl = 'https://craffteine-chat.replit.app/';
   }
 
+  // Check if returning from checkout with order_complete parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const orderComplete = urlParams.get('order_complete');
+  
+  // Pass order_complete parameter to iframe if present
+  if (orderComplete === 'true') {
+    widgetUrl += '?order_complete=true';
+    // Clean up URL without reloading the page
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+
   const container = document.createElement("div");
   container.id = "craffteine-chat-widget";
   container.style.cssText = `

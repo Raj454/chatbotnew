@@ -461,9 +461,16 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
       // Use cart permalink format with properties - this goes to cart page with item added
       let checkoutUrl = `https://${cleanUrl}/cart/${variantId}:1?properties=${propertiesBase64}`;
       
-      // Add return URL for post-checkout redirect (if provided)
-      if (returnUrl) {
-        checkoutUrl += `&checkout[return_to]=${encodeURIComponent(returnUrl)}`;
+      // Add return URL for post-checkout redirect
+      // Priority: 1) Request body returnUrl, 2) Environment variable, 3) None
+      const finalReturnUrl = returnUrl || process.env.SHOPIFY_RETURN_URL;
+      if (finalReturnUrl) {
+        // Append order_complete parameter if not already present
+        let returnWithParam = finalReturnUrl;
+        if (!returnWithParam.includes('order_complete=')) {
+          returnWithParam += (returnWithParam.includes('?') ? '&' : '?') + 'order_complete=true';
+        }
+        checkoutUrl += `&checkout[return_to]=${encodeURIComponent(returnWithParam)}`;
       }
 
       console.log('Cart checkout URL created for variant:', variantId);
