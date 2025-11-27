@@ -21,12 +21,18 @@
   const urlParams = new URLSearchParams(window.location.search);
   const orderComplete = urlParams.get('order_complete');
   
+  // Also check localStorage for order completion flag (set by thank-you page)
+  const localStorageComplete = localStorage.getItem('craffteine_order_complete');
+  
   // Pass order_complete parameter to iframe if present
-  if (orderComplete === 'true') {
+  if (orderComplete === 'true' || localStorageComplete === 'true') {
     widgetUrl += '?order_complete=true';
-    // Clean up URL without reloading the page
-    const cleanUrl = window.location.pathname;
-    window.history.replaceState({}, document.title, cleanUrl);
+    // Clean up
+    localStorage.removeItem('craffteine_order_complete');
+    if (orderComplete === 'true') {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
   }
 
   const container = document.createElement("div");
@@ -42,6 +48,7 @@
   `;
 
   const iframe = document.createElement("iframe");
+  iframe.id = "craffteine-chat-iframe";
   iframe.src = widgetUrl;
   iframe.style.cssText = `
     width: 100%;
@@ -56,4 +63,23 @@
   } else {
     document.body.appendChild(container);
   }
+
+  // Poll localStorage for order completion (in case thank-you page sets it)
+  var checkInterval = setInterval(function() {
+    var complete = localStorage.getItem('craffteine_order_complete');
+    if (complete === 'true') {
+      localStorage.removeItem('craffteine_order_complete');
+      clearInterval(checkInterval);
+      // Send message to iframe
+      var chatIframe = document.getElementById('craffteine-chat-iframe');
+      if (chatIframe && chatIframe.contentWindow) {
+        chatIframe.contentWindow.postMessage({ type: 'CRAFFTEINE_ORDER_COMPLETE' }, '*');
+      }
+    }
+  }, 500);
+
+  // Stop polling after 5 minutes
+  setTimeout(function() {
+    clearInterval(checkInterval);
+  }, 300000);
 })();
