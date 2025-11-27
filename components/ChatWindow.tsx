@@ -3,6 +3,16 @@ import { Message } from '../types';
 import ChatMessage from './ChatMessage';
 import TypingIndicator from './TypingIndicator';
 import IngredientSliders from './IngredientSliders';
+import { InChatCheckout } from './InChatCheckout';
+
+interface FormulaSummary {
+  name: string;
+  format: string;
+  goal: string;
+  ingredients: Array<{ name: string; dosage: number; unit: string }>;
+  sweetener?: string;
+  flavors?: string;
+}
 
 interface ChatWindowProps {
   messages: Message[];
@@ -10,6 +20,7 @@ interface ChatWindowProps {
   onSelection: (value: string | string[], component: string) => void;
   proceedUrl: string | null;
   cooldownRemainingMs?: number;
+  formulaSummary?: FormulaSummary | null;
 }
 
 const ChatInput: React.FC<{ 
@@ -85,7 +96,7 @@ const ChatInput: React.FC<{
   );
 };
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isTyping, onSelection, proceedUrl, cooldownRemainingMs = 0 }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isTyping, onSelection, proceedUrl, cooldownRemainingMs = 0, formulaSummary }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessage = messages[messages.length - 1];
   const isLastMessageFromBot = lastMessage?.sender === 'bot';
@@ -144,7 +155,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isTyping, onSelection
             />
           )}
           
-          {proceedUrl && (
+          {proceedUrl && formulaSummary && (
+            <div className="mt-3 flex justify-center">
+              <InChatCheckout
+                formulaName={formulaSummary.name}
+                format={formulaSummary.format}
+                goal={formulaSummary.goal}
+                ingredients={formulaSummary.ingredients}
+                sweetener={formulaSummary.sweetener}
+                flavors={formulaSummary.flavors}
+                checkoutUrl={proceedUrl}
+              />
+            </div>
+          )}
+          
+          {proceedUrl && !formulaSummary && (
             <a
               href={proceedUrl}
               target="_blank"

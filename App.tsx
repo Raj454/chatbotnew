@@ -266,6 +266,14 @@ const App: React.FC = () => {
   const [hasStarted, setHasStarted] = useState(false);
   const [formula, setFormula] = useState<Formula>({});
   const [proceedUrl, setProceedUrl] = useState<string | null>(null);
+  const [checkoutSummary, setCheckoutSummary] = useState<{
+    name: string;
+    format: string;
+    goal: string;
+    ingredients: Array<{ name: string; dosage: number; unit: string }>;
+    sweetener?: string;
+    flavors?: string;
+  } | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
 
   const conversationHistoryRef = useRef<Message[]>([]);
@@ -315,6 +323,7 @@ const App: React.FC = () => {
     setIsTyping(false);
     setFormula({});
     setProceedUrl(null);
+    setCheckoutSummary(null);
     setCooldownRemainingMs(0);
     lastUserRequestAt.current = 0;
     sessionIdRef.current = sessionService.getSessionId();
@@ -558,16 +567,34 @@ const App: React.FC = () => {
                     
                     const shopifyData = await shopifyResponse.json();
                     
+                    // Build checkout summary for in-chat display
+                    const checkoutSummaryData = {
+                        name: toString(finalFormula.FormulaName) || 'Custom Formula',
+                        format: toString(finalFormula.Format) || 'Stick Pack',
+                        goal: toString(finalFormula.Goal) || 'Wellness',
+                        ingredients: ingredients.map(ing => ({
+                            name: ing.name,
+                            dosage: ing.dosage,
+                            unit: ing.unit
+                        })),
+                        sweetener: toString(finalFormula.Sweetener),
+                        flavors: toString(finalFormula.Flavors)
+                    };
+                    
                     if (shopifyData.success && shopifyData.checkoutUrl) {
                         console.log('✅ Shopify checkout created:', shopifyData.checkoutUrl);
                         setProceedUrl(shopifyData.checkoutUrl);
+                        setCheckoutSummary(checkoutSummaryData);
                     } else {
                         console.error('⚠️ Shopify checkout creation failed:', shopifyData.error);
-                        setProceedUrl(`https://crafftein.myshopify.com/products/customize-crafftein-formula?${queryParams.toString()}`);
+                        const fallbackUrl = `https://crafftein.myshopify.com/products/customize-crafftein-formula?${queryParams.toString()}`;
+                        setProceedUrl(fallbackUrl);
+                        setCheckoutSummary(checkoutSummaryData);
                     }
                 } catch (error) {
                     console.error('⚠️ Error saving formula:', error);
-                    setProceedUrl(`https://crafftein.myshopify.com/products/customize-crafttein-formula?${queryParams.toString()}`);
+                    const fallbackUrl = `https://crafftein.myshopify.com/products/customize-crafttein-formula?${queryParams.toString()}`;
+                    setProceedUrl(fallbackUrl);
                 }
             })();
             
@@ -643,6 +670,7 @@ const App: React.FC = () => {
             onSelection={handleSelection} 
             proceedUrl={proceedUrl}
             cooldownRemainingMs={cooldownRemainingMs}
+            formulaSummary={checkoutSummary}
           />
         </div>
       )}
