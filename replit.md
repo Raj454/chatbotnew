@@ -6,10 +6,20 @@ The Craffteine Assistant is an AI-powered chatbot designed to guide users in cre
 
 ## Recent Changes
 
+**November 27, 2025 - In-Chat Checkout**
+- ✅ Created InChatCheckout component with order summary card
+- ✅ Displays formula name, format, goal, ingredients with dosages
+- ✅ Shows price ($29.99 for 30 servings)
+- ✅ "Secure Checkout" button opens Shopify checkout in popup window
+- ✅ Fallback to new tab if popup is blocked
+- ✅ Loading state while checkout is in progress
+- ✅ Updated store URL to uu9bie-sk.myshopify.com
+- Status: In-chat checkout experience working
+
 **November 26, 2025 - Shopify Integration**
-- ✅ Connected to Shopify store (crafftein.myshopify.com)
+- ✅ Connected to Shopify store (uu9bie-sk.myshopify.com)
 - ✅ Products are automatically created in Shopify when formula is complete
-- ✅ "Complete Your Order" button links directly to Shopify product page
+- ✅ Cart permalink with Base64-encoded line item properties
 - ✅ Created embeddable widget script with toggle button
 - ✅ Added loading state while Shopify product is being created
 - Status: Full Shopify integration working
