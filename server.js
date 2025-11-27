@@ -344,7 +344,8 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
     const { 
       formulaName, ingredients, format, sweetener, flavors, goal, 
       routine, lifestyle, sensitivities, currentSupplements, experience,
-      sessionId 
+      sessionId,
+      returnUrl
     } = req.body;
 
     if (!formulaName || !format) {
@@ -458,7 +459,12 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
       const propertiesBase64 = Buffer.from(JSON.stringify(propertiesObj)).toString('base64');
       
       // Use cart permalink format with properties - this goes to cart page with item added
-      const checkoutUrl = `https://${cleanUrl}/cart/${variantId}:1?properties=${propertiesBase64}`;
+      let checkoutUrl = `https://${cleanUrl}/cart/${variantId}:1?properties=${propertiesBase64}`;
+      
+      // Add return URL for post-checkout redirect (if provided)
+      if (returnUrl) {
+        checkoutUrl += `&checkout[return_to]=${encodeURIComponent(returnUrl)}`;
+      }
 
       console.log('Cart checkout URL created for variant:', variantId);
 

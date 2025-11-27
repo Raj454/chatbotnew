@@ -564,6 +564,9 @@ const App: React.FC = () => {
                     }) || [];
                     
                     // Pass ALL user data to Shopify
+                    // Include return URL to redirect back to chat after checkout
+                    const returnUrl = window.location.origin + window.location.pathname + '?order_complete=true';
+                    
                     const shopifyResponse = await fetch('/api/shopify/checkout', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -580,7 +583,8 @@ const App: React.FC = () => {
                             sensitivities: toString(finalFormula.Sensitivities),
                             currentSupplements: toString(finalFormula.CurrentSupplements),
                             experience: toString(finalFormula.Experience),
-                            sessionId: sessionIdRef.current
+                            sessionId: sessionIdRef.current,
+                            returnUrl
                         })
                     });
                     
