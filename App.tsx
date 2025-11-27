@@ -14,6 +14,16 @@ const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
 // Rate limiting: prevent rapid-fire messages to avoid OpenAI API rate limits
 const COOLDOWN_MS = 4000; // 4 seconds between messages (increased to prevent rate limit errors)
 
+// Type for stored ingredients
+interface StoredIngredient {
+  name: string;
+  min: number;
+  max: number;
+  suggested: number;
+  unit: string;
+  rationale?: string;
+}
+
 // Normalize user input before saving to formula state
 const normalizeValue = (userValue: string, component: string, previousBotMessage: Message | undefined): string => {
   const trimmed = userValue.trim().toLowerCase();
@@ -261,6 +271,7 @@ const App: React.FC = () => {
   const conversationHistoryRef = useRef<Message[]>([]);
   const lastUserRequestAt = useRef<number>(0);
   const sessionIdRef = useRef<string>(sessionService.getSessionId());
+  const ingredientsRef = useRef<StoredIngredient[]>([]);
 
   useEffect(() => {
     conversationHistoryRef.current = messages;
@@ -307,6 +318,7 @@ const App: React.FC = () => {
     setCooldownRemainingMs(0);
     lastUserRequestAt.current = 0;
     sessionIdRef.current = sessionService.getSessionId();
+    ingredientsRef.current = [];
   };
 
   const handleStart = async () => {
@@ -403,12 +415,13 @@ const App: React.FC = () => {
             // Use newFormula which already has the normalized value - do NOT override with raw value
             const finalFormula = { ...newFormula };
             
-            // Find the message that contains ingredients to build the summary
-            const messageWithIngredients = [...messages].reverse().find(m => m.ingredients && m.ingredients.length > 0);
+            // Get stored ingredients from ref (more reliable than searching messages)
+            const storedIngredients = ingredientsRef.current;
+            console.log('📋 Building summary with', storedIngredients.length, 'stored ingredients');
             
             // Build formula summary from collected data
             let builtFormulaSummary = response.formulaSummary;
-            if (!builtFormulaSummary && messageWithIngredients?.ingredients) {
+            if (!builtFormulaSummary && storedIngredients.length > 0) {
                 // Parse dosages if available
                 let dosageMap: { [key: string]: number } = {};
                 if (finalFormula.Dosage && typeof finalFormula.Dosage === 'string') {
@@ -420,7 +433,7 @@ const App: React.FC = () => {
                 builtFormulaSummary = {
                     formulaName: finalFormula.FormulaName || 'Custom Formula',
                     deliveryFormat: finalFormula.Format || 'Stick Pack',
-                    ingredients: messageWithIngredients.ingredients.map(ing => ({
+                    ingredients: storedIngredients.map(ing => ({
                         name: ing.name,
                         min: ing.min,
                         max: ing.max,
@@ -505,10 +518,8 @@ const App: React.FC = () => {
                     console.log('✅ Formula saved to database');
                     
                     // Create checkout with base product in Shopify
-                    // Find the message that contains ingredients (could be any bot message)
-                    const messageWithIngredients = [...messages].reverse().find(m => m.ingredients && m.ingredients.length > 0);
-                    
-                    const ingredients = messageWithIngredients?.ingredients?.map(ing => {
+                    // Use stored ingredients from ref
+                    const ingredients = ingredientsRef.current.map(ing => {
                         let dosageValue = ing.suggested;
                         if (finalFormula.Dosage && typeof finalFormula.Dosage === 'string') {
                             try {
@@ -565,6 +576,11 @@ const App: React.FC = () => {
             setMessages(prev => [...prev, finalMessage]);
 
         } else {
+            // Store ingredients in ref if this response has them
+            if (response.ingredients && response.ingredients.length > 0) {
+                ingredientsRef.current = response.ingredients;
+                console.log('📦 Stored ingredients in ref:', ingredientsRef.current.length, 'ingredients');
+            }
             setMessages(prev => [...prev, response]);
         }
     } else {
