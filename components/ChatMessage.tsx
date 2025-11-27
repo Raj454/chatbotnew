@@ -73,16 +73,46 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, proceedUrl }) => {
                   </div>
                 </div>
                 
-                {message.formulaSummary.deliveryFormat && (
-                  <div className="text-center mb-3">
+                {/* Format and Goal */}
+                <div className="flex justify-center gap-2 mb-4 flex-wrap">
+                  {message.formulaSummary.deliveryFormat && (
                     <span className="inline-block bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-semibold">
                       📦 {message.formulaSummary.deliveryFormat}
                     </span>
+                  )}
+                  {message.formulaSummary.goal && (
+                    <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
+                      🎯 {message.formulaSummary.goal}
+                    </span>
+                  )}
+                </div>
+                
+                {/* User Profile Section */}
+                {(message.formulaSummary.routine || message.formulaSummary.lifestyle || 
+                  message.formulaSummary.sensitivities || message.formulaSummary.experience) && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="text-xs font-semibold text-gray-500 mb-2">YOUR PROFILE</div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {message.formulaSummary.routine && (
+                        <div><span className="text-gray-500">Routine:</span> <span className="font-medium">{message.formulaSummary.routine}</span></div>
+                      )}
+                      {message.formulaSummary.lifestyle && (
+                        <div><span className="text-gray-500">Lifestyle:</span> <span className="font-medium">{message.formulaSummary.lifestyle}</span></div>
+                      )}
+                      {message.formulaSummary.sensitivities && (
+                        <div><span className="text-gray-500">Sensitivities:</span> <span className="font-medium">{message.formulaSummary.sensitivities}</span></div>
+                      )}
+                      {message.formulaSummary.experience && (
+                        <div><span className="text-gray-500">Experience:</span> <span className="font-medium">{message.formulaSummary.experience}</span></div>
+                      )}
+                    </div>
                   </div>
                 )}
                 
-                <div className="space-y-2">
-                  {message.formulaSummary.ingredients.map((ingredient, idx) => (
+                {/* Ingredients */}
+                <div className="text-xs font-semibold text-gray-500 mb-2">YOUR INGREDIENTS</div>
+                <div className="space-y-2 mb-4">
+                  {message.formulaSummary.ingredients?.map((ingredient, idx) => (
                     <div key={idx} className="bg-gradient-to-br from-purple-50 to-pink-50 p-3 rounded-lg border-2 border-purple-200 shadow-sm hover:shadow-md transition-all hover:scale-[1.02]">
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-gray-900 text-sm flex items-center">
@@ -96,6 +126,25 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, proceedUrl }) => {
                     </div>
                   ))}
                 </div>
+                
+                {/* Sweetener and Flavors for Stick Pack */}
+                {(message.formulaSummary.sweetener || message.formulaSummary.flavors) && (
+                  <div className="p-3 bg-pink-50 rounded-lg">
+                    <div className="text-xs font-semibold text-gray-500 mb-2">TASTE OPTIONS</div>
+                    <div className="flex flex-wrap gap-2">
+                      {message.formulaSummary.sweetener && (
+                        <span className="inline-block bg-white text-pink-700 px-3 py-1 rounded-full text-sm font-medium border border-pink-200">
+                          🍯 {message.formulaSummary.sweetener}
+                        </span>
+                      )}
+                      {message.formulaSummary.flavors && (
+                        <span className="inline-block bg-white text-pink-700 px-3 py-1 rounded-full text-sm font-medium border border-pink-200">
+                          🍒 {message.formulaSummary.flavors}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             

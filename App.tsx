@@ -400,15 +400,51 @@ const App: React.FC = () => {
 
     if (response) {
         if (response.isComplete) {
+            // Use newFormula which already has the normalized value - do NOT override with raw value
+            const finalFormula = { ...newFormula };
+            
+            // Find the message that contains ingredients to build the summary
+            const messageWithIngredients = [...messages].reverse().find(m => m.ingredients && m.ingredients.length > 0);
+            
+            // Build formula summary from collected data
+            let builtFormulaSummary = response.formulaSummary;
+            if (!builtFormulaSummary && messageWithIngredients?.ingredients) {
+                // Parse dosages if available
+                let dosageMap: { [key: string]: number } = {};
+                if (finalFormula.Dosage && typeof finalFormula.Dosage === 'string') {
+                    try {
+                        dosageMap = JSON.parse(finalFormula.Dosage);
+                    } catch (e) {}
+                }
+                
+                builtFormulaSummary = {
+                    formulaName: finalFormula.FormulaName || 'Custom Formula',
+                    deliveryFormat: finalFormula.Format || 'Stick Pack',
+                    ingredients: messageWithIngredients.ingredients.map(ing => ({
+                        name: ing.name,
+                        min: ing.min,
+                        max: ing.max,
+                        suggested: dosageMap[ing.name] || ing.suggested,
+                        unit: ing.unit,
+                        rationale: ing.rationale
+                    })),
+                    goal: finalFormula.Goal,
+                    sweetener: finalFormula.Sweetener,
+                    flavors: finalFormula.Flavors,
+                    routine: finalFormula.Routine,
+                    lifestyle: finalFormula.Lifestyle,
+                    sensitivities: finalFormula.Sensitivities,
+                    currentSupplements: finalFormula.CurrentSupplements,
+                    experience: finalFormula.Experience
+                };
+            }
+            
             const finalMessage: Message = {
                 id: Date.now().toString(),
                 sender: 'bot',
                 text: response.text,
-                formulaSummary: response.formulaSummary,
+                formulaSummary: builtFormulaSummary,
             };
-
-            // Use newFormula which already has the normalized value - do NOT override with raw value
-            const finalFormula = { ...newFormula };
             const queryParams = new URLSearchParams();
             
             Object.entries(finalFormula).forEach(([key, val]) => {
