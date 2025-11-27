@@ -370,8 +370,15 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
       if (currentSupplements) cartParams.append('properties[Current Supplements]', currentSupplements);
       if (experience) cartParams.append('properties[Experience Level]', experience);
       
-      // Formula ingredients and options
-      if (ingredientsList) cartParams.append('properties[Ingredients]', ingredientsList);
+      // Formula ingredients - each as separate property for better display
+      if (ingredients && ingredients.length > 0) {
+        ingredients.forEach((ing, index) => {
+          const dosageValue = `${ing.dosage}${ing.unit || 'mg'}`;
+          cartParams.append(`properties[Ingredient ${index + 1}]`, `${ing.name} - ${dosageValue}`);
+        });
+      }
+      
+      // Sweetener and flavors
       if (sweetener) cartParams.append('properties[Sweetener]', sweetener);
       if (flavors) cartParams.append('properties[Flavors]', flavors);
       
