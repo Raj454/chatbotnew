@@ -335,26 +335,22 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
         throw new Error('Base product has no variants');
       }
 
-      // Use cart permalink format: /cart/VARIANT:QTY
-      // This creates a new cart and goes to cart page
-      // Then we'll use JavaScript in the widget to redirect to checkout
-      
-      // Encode formula data in cart attributes and note
-      const cartNote = encodeURIComponent(formulaNote);
-      
-      // Build cart permalink with note
-      // Format: /cart/VARIANT_ID:QUANTITY?note=FORMULA_NOTE&attributes[key]=value
+      // Use /cart/add format which stays on cart page after adding item
+      // Line item properties are attached to the product in cart
       const cartParams = new URLSearchParams();
-      cartParams.append('note', formulaNote);
-      cartParams.append('attributes[formula_name]', formulaName);
-      cartParams.append('attributes[format]', format);
-      cartParams.append('attributes[goal]', goal || 'Wellness');
-      if (sweetener) cartParams.append('attributes[sweetener]', sweetener);
-      if (flavors) cartParams.append('attributes[flavors]', flavors);
-      cartParams.append('attributes[ingredients]', ingredientsList);
+      cartParams.append('id', variantId.toString());
+      cartParams.append('quantity', '1');
       
-      // Cart permalink format goes straight to cart with item
-      const checkoutUrl = `https://${cleanUrl}/cart/${variantId}:1?${cartParams.toString()}`;
+      // Add formula details as line item properties (shown on cart/checkout/order)
+      cartParams.append('properties[Formula Name]', formulaName);
+      cartParams.append('properties[Format]', format);
+      cartParams.append('properties[Goal]', goal || 'Wellness');
+      cartParams.append('properties[Ingredients]', ingredientsList);
+      if (sweetener) cartParams.append('properties[Sweetener]', sweetener);
+      if (flavors) cartParams.append('properties[Flavors]', flavors);
+      
+      // This goes to cart page after adding (not checkout)
+      const checkoutUrl = `https://${cleanUrl}/cart/add?${cartParams.toString()}`;
 
       console.log('Cart checkout URL created for variant:', variantId);
 
