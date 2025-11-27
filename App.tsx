@@ -276,6 +276,7 @@ const App: React.FC = () => {
     price?: string;
   } | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
+  const [orderConfirmed, setOrderConfirmed] = useState(false);
 
   const conversationHistoryRef = useRef<Message[]>([]);
   const lastUserRequestAt = useRef<number>(0);
@@ -326,9 +327,26 @@ const App: React.FC = () => {
     setProceedUrl(null);
     setCheckoutSummary(null);
     setCooldownRemainingMs(0);
+    setOrderConfirmed(false);
     lastUserRequestAt.current = 0;
     sessionIdRef.current = sessionService.getSessionId();
     ingredientsRef.current = [];
+  };
+
+  const handleCheckoutComplete = () => {
+    setOrderConfirmed(true);
+    
+    const confirmationMessage: Message = {
+      id: 'order-confirmation',
+      sender: 'bot',
+      text: "Your order has been placed! Thank you for choosing Craffteine. Your custom formula will be handcrafted and shipped within 3-5 business days. You'll receive an email confirmation shortly with tracking details.",
+    };
+    setMessages(prev => [...prev, confirmationMessage]);
+  };
+
+  const handleCreateAnother = () => {
+    resetChat();
+    handleStart();
   };
 
   const handleStart = async () => {
@@ -673,6 +691,9 @@ const App: React.FC = () => {
             proceedUrl={proceedUrl}
             cooldownRemainingMs={cooldownRemainingMs}
             formulaSummary={checkoutSummary}
+            orderConfirmed={orderConfirmed}
+            onCheckoutComplete={handleCheckoutComplete}
+            onCreateAnother={handleCreateAnother}
           />
         </div>
       )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface Ingredient {
   name: string;
@@ -31,9 +31,20 @@ export function InChatCheckout({
 }: InChatCheckoutProps) {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutWindow, setCheckoutWindow] = useState<Window | null>(null);
+  const [showConfirmPrompt, setShowConfirmPrompt] = useState(false);
+  const checkIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+      }
+    };
+  }, []);
 
   const handleCheckout = () => {
     setIsCheckingOut(true);
+    setShowConfirmPrompt(false);
     
     const width = 500;
     const height = 700;
@@ -54,16 +65,28 @@ export function InChatCheckout({
     
     setCheckoutWindow(popup);
 
-    const checkClosed = setInterval(() => {
+    checkIntervalRef.current = window.setInterval(() => {
       if (popup && popup.closed) {
-        clearInterval(checkClosed);
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+        }
         setIsCheckingOut(false);
         setCheckoutWindow(null);
-        if (onCheckoutComplete) {
-          onCheckoutComplete();
-        }
+        setShowConfirmPrompt(true);
       }
     }, 500);
+  };
+
+  const handleConfirmYes = () => {
+    setShowConfirmPrompt(false);
+    if (onCheckoutComplete) {
+      onCheckoutComplete();
+    }
+  };
+
+  const handleConfirmNo = () => {
+    setShowConfirmPrompt(false);
   };
 
   const focusCheckout = () => {
@@ -127,7 +150,36 @@ export function InChatCheckout({
         )}
       </div>
 
-      {!isCheckingOut ? (
+      {showConfirmPrompt ? (
+        <div className="space-y-3">
+          <div className="bg-blue-50 rounded-xl p-4 text-center border border-blue-200">
+            <div className="flex items-center justify-center gap-2 text-blue-700 mb-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium">Did you complete your order?</span>
+            </div>
+            <p className="text-xs text-blue-600 mb-3">Let us know so we can confirm your purchase</p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleConfirmYes}
+                className="flex-1 bg-green-500 text-white font-medium py-2 px-4 rounded-lg hover:bg-green-600 transition-all duration-200 text-sm flex items-center justify-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Yes, I paid!
+              </button>
+              <button
+                onClick={handleConfirmNo}
+                className="flex-1 bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-300 transition-all duration-200 text-sm"
+              >
+                Not yet
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : !isCheckingOut ? (
         <button
           onClick={handleCheckout}
           className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold py-3 px-4 rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2"
