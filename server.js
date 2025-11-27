@@ -289,28 +289,45 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
       });
     }
 
-    const { formulaName, ingredients, format, sweetener, flavors, goal, sessionId } = req.body;
+    const { 
+      formulaName, ingredients, format, sweetener, flavors, goal, 
+      routine, lifestyle, sensitivities, currentSupplements, experience,
+      sessionId 
+    } = req.body;
 
-    if (!formulaName || !ingredients || !format) {
+    if (!formulaName || !format) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Missing required fields: formulaName, ingredients, format' 
+        error: 'Missing required fields: formulaName, format' 
       });
     }
 
     const cleanUrl = storeUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     
-    // Build formula note text
-    const ingredientsList = ingredients.map(ing => 
-      `${ing.name}: ${ing.dosage}${ing.unit}`
-    ).join(', ');
+    // Build ingredients list from array
+    const ingredientsList = (ingredients && ingredients.length > 0) 
+      ? ingredients.map(ing => `${ing.name}: ${ing.dosage}${ing.unit}`).join(', ')
+      : '';
 
-    let formulaNote = `Formula: ${formulaName}\n`;
+    // Build comprehensive formula note with all user data
+    let formulaNote = `=== CUSTOM FORMULA ORDER ===\n\n`;
+    formulaNote += `Formula Name: ${formulaName}\n`;
     formulaNote += `Format: ${format}\n`;
-    formulaNote += `Goal: ${goal || 'Wellness'}\n`;
+    formulaNote += `Goal: ${goal || 'Wellness'}\n\n`;
+    
+    // User Profile
+    formulaNote += `--- USER PROFILE ---\n`;
+    if (routine) formulaNote += `Daily Routine: ${routine}\n`;
+    if (lifestyle) formulaNote += `Lifestyle: ${lifestyle}\n`;
+    if (sensitivities) formulaNote += `Sensitivities: ${sensitivities}\n`;
+    if (currentSupplements) formulaNote += `Current Supplements: ${currentSupplements}\n`;
+    if (experience) formulaNote += `Experience Level: ${experience}\n`;
+    
+    // Formula Details
+    formulaNote += `\n--- FORMULA DETAILS ---\n`;
+    if (ingredientsList) formulaNote += `Ingredients: ${ingredientsList}\n`;
     if (sweetener) formulaNote += `Sweetener: ${sweetener}\n`;
     if (flavors) formulaNote += `Flavors: ${flavors}\n`;
-    formulaNote += `Ingredients: ${ingredientsList}`;
 
     // If base product ID is set, create cart URL with line item properties
     if (baseProductId) {
@@ -341,11 +358,20 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
       cartParams.append('id', variantId.toString());
       cartParams.append('quantity', '1');
       
-      // Add formula details as line item properties (shown on cart/checkout/order)
+      // Add ALL formula details as line item properties (shown on cart/checkout/order)
       cartParams.append('properties[Formula Name]', formulaName);
       cartParams.append('properties[Format]', format);
       cartParams.append('properties[Goal]', goal || 'Wellness');
-      cartParams.append('properties[Ingredients]', ingredientsList);
+      
+      // User Profile
+      if (routine) cartParams.append('properties[Daily Routine]', routine);
+      if (lifestyle) cartParams.append('properties[Lifestyle]', lifestyle);
+      if (sensitivities) cartParams.append('properties[Sensitivities]', sensitivities);
+      if (currentSupplements) cartParams.append('properties[Current Supplements]', currentSupplements);
+      if (experience) cartParams.append('properties[Experience Level]', experience);
+      
+      // Formula ingredients and options
+      if (ingredientsList) cartParams.append('properties[Ingredients]', ingredientsList);
       if (sweetener) cartParams.append('properties[Sweetener]', sweetener);
       if (flavors) cartParams.append('properties[Flavors]', flavors);
       

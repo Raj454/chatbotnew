@@ -469,8 +469,10 @@ const App: React.FC = () => {
                     console.log('✅ Formula saved to database');
                     
                     // Create checkout with base product in Shopify
-                    const lastBotMessage = messages[messages.length - 1];
-                    const ingredients = lastBotMessage?.ingredients?.map(ing => {
+                    // Find the message that contains ingredients (could be any bot message)
+                    const messageWithIngredients = [...messages].reverse().find(m => m.ingredients && m.ingredients.length > 0);
+                    
+                    const ingredients = messageWithIngredients?.ingredients?.map(ing => {
                         let dosageValue = ing.suggested;
                         if (finalFormula.Dosage && typeof finalFormula.Dosage === 'string') {
                             try {
@@ -486,6 +488,7 @@ const App: React.FC = () => {
                         };
                     }) || [];
                     
+                    // Pass ALL user data to Shopify
                     const shopifyResponse = await fetch('/api/shopify/checkout', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -496,6 +499,12 @@ const App: React.FC = () => {
                             sweetener: toString(finalFormula.Sweetener),
                             flavors: toString(finalFormula.Flavors),
                             goal: toString(finalFormula.Goal),
+                            // Include all user profile data
+                            routine: toString(finalFormula.Routine),
+                            lifestyle: toString(finalFormula.Lifestyle),
+                            sensitivities: toString(finalFormula.Sensitivities),
+                            currentSupplements: toString(finalFormula.CurrentSupplements),
+                            experience: toString(finalFormula.Experience),
                             sessionId: sessionIdRef.current
                         })
                     });
