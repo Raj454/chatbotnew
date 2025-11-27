@@ -124,8 +124,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isTyping, onSelection
       {/* Messages Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-          {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
+          {messages.map((msg, index) => (
+            <ChatMessage 
+              key={msg.id} 
+              message={msg} 
+              proceedUrl={index === messages.length - 1 ? proceedUrl : undefined}
+            />
           ))}
           {isTyping && <TypingIndicator />}
         </div>
