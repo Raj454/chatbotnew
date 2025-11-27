@@ -42,6 +42,33 @@ export function InChatCheckout({
     };
   }, []);
 
+  // Listen for postMessage from thank-you page to auto-confirm order
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'CRAFFTEINE_ORDER_COMPLETE') {
+        // Close the popup if still open
+        if (checkoutWindow && !checkoutWindow.closed) {
+          checkoutWindow.close();
+        }
+        // Clear interval
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+        }
+        // Reset states and trigger confirmation
+        setIsCheckingOut(false);
+        setCheckoutWindow(null);
+        setShowConfirmPrompt(false);
+        if (onCheckoutComplete) {
+          onCheckoutComplete();
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onCheckoutComplete, checkoutWindow]);
+
   const handleCheckout = () => {
     setIsCheckingOut(true);
     setShowConfirmPrompt(false);
