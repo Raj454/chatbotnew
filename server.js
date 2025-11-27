@@ -227,6 +227,58 @@ app.get('/api/trademark/check/:name', async (req, res) => {
 
 // ============ SHOPIFY API ROUTES ============
 
+// Get base product info (including price)
+app.get('/api/shopify/base-product', apiLimiter, async (req, res) => {
+  try {
+    const storeUrl = process.env.SHOPIFY_STORE_URL;
+    const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
+    const baseProductId = process.env.SHOPIFY_BASE_PRODUCT_ID;
+
+    if (!storeUrl || !accessToken || !baseProductId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Shopify credentials or base product not configured' 
+      });
+    }
+
+    const cleanUrl = storeUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const productUrl = `https://${cleanUrl}/admin/api/2024-01/products/${baseProductId}.json`;
+
+    const response = await fetch(productUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': accessToken
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch base product: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const product = data.product;
+    const variant = product.variants[0];
+
+    res.json({
+      success: true,
+      product: {
+        id: product.id,
+        title: product.title,
+        price: variant?.price || '29.99',
+        variantId: variant?.id,
+        compareAtPrice: variant?.compare_at_price
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching base product:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to fetch base product' 
+    });
+  }
+});
+
 // Test Shopify connection
 app.get('/api/shopify/test', apiLimiter, async (req, res) => {
   try {
@@ -346,7 +398,9 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
       }
 
       const productData = await productResponse.json();
-      const variantId = productData.product.variants[0]?.id;
+      const variant = productData.product.variants[0];
+      const variantId = variant?.id;
+      const productPrice = variant?.price || '29.99';
 
       if (!variantId) {
         throw new Error('Base product has no variants');
@@ -412,6 +466,7 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
         success: true, 
         checkoutUrl,
         variantId,
+        price: productPrice,
         formulaNote
       });
     } else {

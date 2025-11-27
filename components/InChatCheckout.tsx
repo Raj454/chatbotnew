@@ -14,6 +14,7 @@ interface InChatCheckoutProps {
   sweetener?: string;
   flavors?: string;
   checkoutUrl: string;
+  price?: string;
   onCheckoutComplete?: () => void;
 }
 
@@ -25,6 +26,7 @@ export function InChatCheckout({
   sweetener,
   flavors,
   checkoutUrl,
+  price = '29.99',
   onCheckoutComplete
 }: InChatCheckoutProps) {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -91,7 +93,7 @@ export function InChatCheckout({
             <p className="text-xs text-gray-500">{format} • {goal}</p>
           </div>
           <div className="text-right">
-            <p className="text-lg font-bold text-gray-800">$29.99</p>
+            <p className="text-lg font-bold text-gray-800">${parseFloat(price).toFixed(2)}</p>
             <p className="text-xs text-gray-500">30 Servings</p>
           </div>
         </div>

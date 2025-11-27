@@ -273,6 +273,7 @@ const App: React.FC = () => {
     ingredients: Array<{ name: string; dosage: number; unit: string }>;
     sweetener?: string;
     flavors?: string;
+    price?: string;
   } | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
 
@@ -578,7 +579,8 @@ const App: React.FC = () => {
                             unit: ing.unit
                         })),
                         sweetener: toString(finalFormula.Sweetener),
-                        flavors: toString(finalFormula.Flavors)
+                        flavors: toString(finalFormula.Flavors),
+                        price: shopifyData.price
                     };
                     
                     if (shopifyData.success && shopifyData.checkoutUrl) {
@@ -589,7 +591,7 @@ const App: React.FC = () => {
                         console.error('⚠️ Shopify checkout creation failed:', shopifyData.error);
                         const fallbackUrl = `https://crafftein.myshopify.com/products/customize-crafftein-formula?${queryParams.toString()}`;
                         setProceedUrl(fallbackUrl);
-                        setCheckoutSummary(checkoutSummaryData);
+                        setCheckoutSummary({ ...checkoutSummaryData, price: undefined });
                     }
                 } catch (error) {
                     console.error('⚠️ Error saving formula:', error);

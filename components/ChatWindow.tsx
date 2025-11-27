@@ -12,6 +12,7 @@ interface FormulaSummary {
   ingredients: Array<{ name: string; dosage: number; unit: string }>;
   sweetener?: string;
   flavors?: string;
+  price?: string;
 }
 
 interface ChatWindowProps {
@@ -165,6 +166,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isTyping, onSelection
                 sweetener={formulaSummary.sweetener}
                 flavors={formulaSummary.flavors}
                 checkoutUrl={proceedUrl}
+                price={formulaSummary.price}
               />
             </div>
           )}
