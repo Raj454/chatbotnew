@@ -382,8 +382,29 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
       if (sweetener) cartParams.append('properties[Sweetener]', sweetener);
       if (flavors) cartParams.append('properties[Flavors]', flavors);
       
-      // This goes to cart page after adding (not checkout)
-      const checkoutUrl = `https://${cleanUrl}/cart/add?${cartParams.toString()}`;
+      // Build properties string for cart permalink (Base64 encoded)
+      const propertiesObj = {};
+      propertiesObj['Formula Name'] = formulaName;
+      propertiesObj['Format'] = format;
+      propertiesObj['Goal'] = goal || 'Wellness';
+      if (routine) propertiesObj['Daily Routine'] = routine;
+      if (lifestyle) propertiesObj['Lifestyle'] = lifestyle;
+      if (sensitivities) propertiesObj['Sensitivities'] = sensitivities;
+      if (currentSupplements) propertiesObj['Current Supplements'] = currentSupplements;
+      if (experience) propertiesObj['Experience Level'] = experience;
+      if (ingredients && ingredients.length > 0) {
+        ingredients.forEach((ing, index) => {
+          propertiesObj[`Ingredient ${index + 1}`] = `${ing.name} - ${ing.dosage}${ing.unit || 'mg'}`;
+        });
+      }
+      if (sweetener) propertiesObj['Sweetener'] = sweetener;
+      if (flavors) propertiesObj['Flavors'] = flavors;
+      
+      // Encode properties as Base64 for cart permalink
+      const propertiesBase64 = Buffer.from(JSON.stringify(propertiesObj)).toString('base64');
+      
+      // Use cart permalink format with properties - this goes to cart page with item added
+      const checkoutUrl = `https://${cleanUrl}/cart/${variantId}:1?properties=${propertiesBase64}`;
 
       console.log('Cart checkout URL created for variant:', variantId);
 
