@@ -139,6 +139,22 @@ app.get('/api/flavors', async (req, res) => {
   }
 });
 
+// Get bot instructions (public - for AI chatbot)
+// This returns the custom instructions set via Admin Panel
+app.get('/api/settings/bot_instructions', async (req, res) => {
+  try {
+    const result = await db.select().from(settingsTable).where(eq(settingsTable.key, 'bot_instructions'));
+    if (result.length > 0) {
+      res.json({ success: true, value: result[0].value });
+    } else {
+      res.json({ success: true, value: null });
+    }
+  } catch (error) {
+    console.error('Error fetching bot instructions:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch bot instructions' });
+  }
+});
+
 // Save formula
 app.post('/api/formulas', apiLimiter, async (req, res) => {
   try {

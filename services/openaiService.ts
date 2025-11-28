@@ -22,8 +22,34 @@ interface DBBlend {
 
 let cachedIngredients: DBIngredient[] | null = null;
 let cachedBlends: DBBlend[] | null = null;
+let cachedBotInstructions: string | null = null;
 let cacheTimestamp: number = 0;
+let botInstructionsCacheTimestamp: number = 0;
 const CACHE_TTL = 60000;
+
+// Fetch custom bot instructions from database (set via Admin Panel)
+async function fetchBotInstructionsFromDB(): Promise<string | null> {
+  const now = Date.now();
+  if (cachedBotInstructions !== null && (now - botInstructionsCacheTimestamp) < CACHE_TTL) {
+    return cachedBotInstructions;
+  }
+
+  try {
+    const res = await fetch('/api/settings/bot_instructions');
+    if (res.ok) {
+      const data = await res.json();
+      cachedBotInstructions = data.value || null;
+      botInstructionsCacheTimestamp = now;
+      return cachedBotInstructions;
+    }
+  } catch (error) {
+    console.error('Error fetching bot instructions from DB:', error);
+  }
+
+  cachedBotInstructions = null;
+  botInstructionsCacheTimestamp = now;
+  return null;
+}
 
 async function fetchIngredientsFromDB(): Promise<{ blends: DBBlend[], ingredients: DBIngredient[] }> {
   const now = Date.now();
@@ -190,9 +216,26 @@ const executeFunctionCall = async (functionName: string, args: any = {}): Promis
   }
 };
 
-// Use the bot instructions from the config file
-function buildSystemInstruction(ingredientsPrompt: string): string {
-  return buildCompleteSystemInstruction(ingredientsPrompt);
+// Use the bot instructions - combines database (Admin Panel) + code file
+async function buildSystemInstruction(ingredientsPrompt: string): Promise<string> {
+  // Try to get custom instructions from Admin Panel (database)
+  const customInstructions = await fetchBotInstructionsFromDB();
+  
+  // Get the base instructions from the code file
+  const baseInstructions = buildCompleteSystemInstruction(ingredientsPrompt);
+  
+  // If there are custom instructions from Admin Panel, prepend them
+  if (customInstructions && customInstructions.trim()) {
+    return `**ADMIN CUSTOMIZATIONS (PRIORITY):**
+${customInstructions}
+
+---
+
+${baseInstructions}`;
+  }
+  
+  // Otherwise, just use the code file instructions
+  return baseInstructions;
 }
 
 // Helper to get the next missing component based on what's already collected
@@ -435,7 +478,7 @@ export const getNextStep = async (apiKey: string, history: Message[], formula: F
     // Fetch ingredients from database and build system instruction
     const { blends, ingredients } = await fetchIngredientsFromDB();
     const ingredientsPrompt = buildIngredientsPrompt(blends, ingredients);
-    const systemInstructionText = buildSystemInstruction(ingredientsPrompt);
+    const systemInstructionText = await buildSystemInstruction(ingredientsPrompt);
     
     let messages = formatHistory(history, formula, systemInstructionText);
     let attemptCount = 0;
