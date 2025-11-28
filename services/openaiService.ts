@@ -1,7 +1,71 @@
 import type { Message, Formula } from '../types';
-import ingredientsDB from '../ingredients-database.json';
 import { inventoryService } from './inventoryService';
 import { getCurrentTime, getCurrentDate, getWeather, calculate, searchWeb } from '../utils/tools';
+
+interface DBIngredient {
+  id: number;
+  name: string;
+  blend: string;
+  dosageMin: string;
+  dosageMax: string;
+  dosageSuggested: string | null;
+  unit: string | null;
+  inStock: boolean | null;
+}
+
+interface DBBlend {
+  id: number;
+  name: string;
+  displayOrder: number;
+}
+
+let cachedIngredients: DBIngredient[] | null = null;
+let cachedBlends: DBBlend[] | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_TTL = 60000;
+
+async function fetchIngredientsFromDB(): Promise<{ blends: DBBlend[], ingredients: DBIngredient[] }> {
+  const now = Date.now();
+  if (cachedIngredients && cachedBlends && (now - cacheTimestamp) < CACHE_TTL) {
+    return { blends: cachedBlends, ingredients: cachedIngredients };
+  }
+
+  try {
+    const [blendsRes, ingredientsRes] = await Promise.all([
+      fetch('/api/admin/blends-public'),
+      fetch('/api/ingredients')
+    ]);
+
+    if (blendsRes.ok && ingredientsRes.ok) {
+      const blendsData = await blendsRes.json();
+      const ingredientsData = await ingredientsRes.json();
+      cachedBlends = blendsData.data || [];
+      cachedIngredients = ingredientsData.data || [];
+      cacheTimestamp = now;
+      return { blends: cachedBlends!, ingredients: cachedIngredients! };
+    }
+  } catch (error) {
+    console.error('Error fetching ingredients from DB:', error);
+  }
+
+  return { blends: [], ingredients: [] };
+}
+
+function buildIngredientsPrompt(blends: DBBlend[], ingredients: DBIngredient[]): string {
+  const ingredientsByBlend = ingredients.reduce((acc, ing) => {
+    if (!acc[ing.blend]) acc[ing.blend] = [];
+    acc[ing.blend].push(ing);
+    return acc;
+  }, {} as Record<string, DBIngredient[]>);
+
+  const sortedBlends = blends.sort((a, b) => a.displayOrder - b.displayOrder);
+  
+  return sortedBlends.map(blend => {
+    const blendIngredients = ingredientsByBlend[blend.name] || [];
+    const inStockIngredients = blendIngredients.filter(ing => ing.inStock !== false);
+    return `${blend.name}: ${inStockIngredients.map(ing => `${ing.name} ${ing.dosageMin}-${ing.dosageMax}${ing.unit || 'mg'}`).join(', ')}`;
+  }).join('\n');
+}
 
 const API_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -125,14 +189,8 @@ const executeFunctionCall = async (functionName: string, args: any = {}): Promis
   }
 };
 
-// Create ingredients lookup by blend type for easy access
-const ingredientsByBlend = ingredientsDB.ingredients.reduce((acc, ing) => {
-    if (!acc[ing.blend]) acc[ing.blend] = [];
-    acc[ing.blend].push(ing);
-    return acc;
-}, {} as Record<string, any[]>);
-
-const systemInstruction = `Craffteine AI Assistant - AI-powered supplement consultant. Mission: build personalized formulas.
+function buildSystemInstruction(ingredientsPrompt: string): string {
+  return `Craffteine AI Assistant - AI-powered supplement consultant. Mission: build personalized formulas.
 
 **FLOW:** Goal → Format → Routine → Lifestyle → Sensitivities → CurrentSupplements → Experience → Dosage → [Stick Pack only: Sweetener → Flavors] → FormulaName → Complete
 
@@ -156,10 +214,7 @@ Example: User asks "what's the news?" during Format question → call searchWeb(
 **TONE:** Bold, friendly, playful (1-2 emojis/msg, NO lists, conversational)
 
 **INGREDIENTS:**
-${ingredientsDB.blends.map(blend => {
-    const ingredients = ingredientsByBlend[blend] || [];
-    return `${blend}: ${ingredients.map(ing => `${ing.name} ${ing.min}-${ing.max}${ing.unit}`).join(', ')}`;
-}).join('\n')}
+${ingredientsPrompt}
 
 **DOSAGE:** Personalize "suggested" value:
 Beginner/Sedentary 40-60% | Moderate/Active 60-80% | Experienced/Athlete 80-100% | Caffeine-sensitive 30-50%
@@ -608,6 +663,7 @@ You have access to helpful functions to answer off-topic questions naturally:
 **REMEMBER:** Your main job is formula building. Off-topic questions are 5-second detours before you get right back to work!
 
 **CRITICAL:** When NOT using functions (regular supplement conversation), you MUST respond with valid JSON only. No text outside the JSON object.`;
+}
 
 // Helper to get the next missing component based on what's already collected
 const getNextMissingComponent = (formula: Formula): { component: string; text: string; inputType: 'text' | 'options' | 'multiselect' | 'slider' | 'ingredient_sliders' | undefined } => {
@@ -782,10 +838,10 @@ Only suggest flavors from this list. If user asks for a flavor not on this list,
 };
 
 // Helper to format conversation history for OpenAI
-const formatHistory = (history: Message[], formula: Formula): { role: 'user' | 'assistant' | 'system'; content: string }[] => {
+const formatHistory = (history: Message[], formula: Formula, systemInstructionText: string): { role: 'user' | 'assistant' | 'system'; content: string }[] => {
     const formatted: { role: 'user' | 'assistant' | 'system'; content: string }[] = [{
         role: 'system',
-        content: systemInstruction
+        content: systemInstructionText
     }];
     
     // Add inventory context (flavors and stock status)
@@ -846,7 +902,12 @@ export const getNextStep = async (apiKey: string, history: Message[], formula: F
         };
     }
     
-    let messages = formatHistory(history, formula);
+    // Fetch ingredients from database and build system instruction
+    const { blends, ingredients } = await fetchIngredientsFromDB();
+    const ingredientsPrompt = buildIngredientsPrompt(blends, ingredients);
+    const systemInstructionText = buildSystemInstruction(ingredientsPrompt);
+    
+    let messages = formatHistory(history, formula, systemInstructionText);
     let attemptCount = 0;
     const maxAttempts = 5;
     

@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from './schema.js';
+import ingredientsDB from '../ingredients-database.json' assert { type: 'json' };
 
 const { Pool } = pg;
 
@@ -10,7 +11,6 @@ const pool = new Pool({
 
 export const db = drizzle(pool, { schema });
 
-// Default bot instructions (will be stored in database)
 const DEFAULT_BOT_INSTRUCTIONS = `Craffteine AI Assistant - AI-powered supplement consultant. Mission: build personalized formulas.
 
 **TONE:** Bold, friendly, playful (1-2 emojis/msg, NO lists, conversational)
@@ -35,24 +35,34 @@ When a flavor or ingredient is not available:
 
 **RULES:** Only use database ingredients | Stick Pack max 2 flavors | Pods NO flavors | Natural sweeteners only`;
 
-// Seed initial data
 export async function seedDatabase() {
   try {
-    // Check if ingredients already exist
-    const existingIngredients = await db.select().from(schema.ingredients).limit(1);
-    if (existingIngredients.length === 0) {
-      console.log('🌱 Seeding ingredients...');
-      await db.insert(schema.ingredients).values([
-        { name: 'Caffeine', category: 'Energy', dosageMin: '50', dosageMax: '200', unit: 'mg' },
-        { name: 'L-Theanine', category: 'Focus', dosageMin: '100', dosageMax: '200', unit: 'mg' },
-        { name: 'B-Complex', category: 'Energy', dosageMin: '1', dosageMax: '5', unit: 'caps' },
-        { name: 'Ginseng', category: 'Energy', dosageMin: '200', dosageMax: '400', unit: 'mg' },
-        { name: 'Magnesium', category: 'Sleep', dosageMin: '200', dosageMax: '400', unit: 'mg' },
-        { name: 'Melatonin', category: 'Sleep', dosageMin: '0.5', dosageMax: '5', unit: 'mg' },
-      ]);
+    const existingBlends = await db.select().from(schema.blends).limit(1);
+    if (existingBlends.length === 0) {
+      console.log('🌱 Seeding blends...');
+      const blendValues = ingredientsDB.blends.map((name, index) => ({
+        name,
+        displayOrder: index + 1
+      }));
+      await db.insert(schema.blends).values(blendValues);
     }
 
-    // Check if flavors already exist
+    const existingIngredients = await db.select().from(schema.ingredients).limit(1);
+    if (existingIngredients.length === 0) {
+      console.log('🌱 Seeding ingredients from database...');
+      const ingredientValues = ingredientsDB.ingredients.map(ing => ({
+        name: ing.name,
+        blend: ing.blend,
+        dosageMin: ing.min.toString(),
+        dosageMax: ing.max.toString(),
+        dosageSuggested: ing.suggested.toString(),
+        unit: ing.unit,
+        inStock: true
+      }));
+      await db.insert(schema.ingredients).values(ingredientValues);
+      console.log(`✅ Seeded ${ingredientValues.length} ingredients`);
+    }
+
     const existingFlavors = await db.select().from(schema.flavors).limit(1);
     if (existingFlavors.length === 0) {
       console.log('🌱 Seeding flavors...');
@@ -66,7 +76,6 @@ export async function seedDatabase() {
       ]);
     }
 
-    // Check if trademark blacklist exists
     const existingBlacklist = await db.select().from(schema.trademarkBlacklist).limit(1);
     if (existingBlacklist.length === 0) {
       console.log('🌱 Seeding trademark blacklist...');
@@ -79,7 +88,6 @@ export async function seedDatabase() {
       ]);
     }
 
-    // Check if settings exist
     const existingSettings = await db.select().from(schema.settings).limit(1);
     if (existingSettings.length === 0) {
       console.log('🌱 Seeding settings...');

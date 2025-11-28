@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import rateLimit from 'express-rate-limit';
 import { db, seedDatabase } from './db/index.js';
-import { ingredients as ingredientsTable, flavors as flavorsTable, formulas as formulasTable, trademarkBlacklist, settings as settingsTable } from './db/schema.js';
+import { ingredients as ingredientsTable, flavors as flavorsTable, formulas as formulasTable, trademarkBlacklist, settings as settingsTable, blends as blendsTable } from './db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import crypto from 'crypto';
 
@@ -106,7 +106,7 @@ app.get('/api/search', apiLimiter, async (req, res) => {
 
 // ============ DATABASE API ROUTES ============
 
-// Get all ingredients
+// Get all ingredients (public - for AI chatbot)
 app.get('/api/ingredients', async (req, res) => {
   try {
     const allIngredients = await db.select().from(ingredientsTable);
@@ -114,6 +114,17 @@ app.get('/api/ingredients', async (req, res) => {
   } catch (error) {
     console.error('Error fetching ingredients:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch ingredients' });
+  }
+});
+
+// Get all blends (public - for AI chatbot)
+app.get('/api/admin/blends-public', async (req, res) => {
+  try {
+    const allBlends = await db.select().from(blendsTable);
+    res.json({ success: true, data: allBlends });
+  } catch (error) {
+    console.error('Error fetching blends:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch blends' });
   }
 });
 

@@ -2,12 +2,22 @@ import { pgTable, varchar, text, timestamp, serial, boolean, decimal } from 'dri
 
 export const ingredients = pgTable('ingredients', {
   id: serial('id').primaryKey(),
-  name: varchar('name', { length: 100 }).notNull().unique(),
-  category: varchar('category', { length: 50 }).notNull(), // e.g., 'Energy', 'Focus'
+  name: varchar('name', { length: 100 }).notNull(),
+  blend: varchar('blend', { length: 100 }).notNull(), // e.g., 'Craffteine® ENERGY+'
+  category: varchar('category', { length: 50 }), // Optional category for filtering
   dosageMin: decimal('dosage_min', { precision: 10, scale: 2 }).notNull(),
   dosageMax: decimal('dosage_max', { precision: 10, scale: 2 }).notNull(),
+  dosageSuggested: decimal('dosage_suggested', { precision: 10, scale: 2 }),
   unit: varchar('unit', { length: 20 }).default('mg'),
   description: text('description'),
+  inStock: boolean('in_stock').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const blends = pgTable('blends', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  displayOrder: serial('display_order'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
