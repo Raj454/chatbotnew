@@ -58,6 +58,10 @@ localPort = 5001
 externalPort = 5000
 
 [[ports]]
+localPort = 34785
+externalPort = 6000
+
+[[ports]]
 localPort = 35533
 externalPort = 3000
 
@@ -91,3 +95,4 @@ build = ["npm", "run", "build"]
 [userenv.shared]
 SHOPIFY_BASE_PRODUCT_ID = "7687233536051"
 SHOPIFY_RETURN_URL = "https://craffteine.com/"
+ADMIN_PASSWORD = "craffteine2025"

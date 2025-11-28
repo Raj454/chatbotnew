@@ -45,3 +45,11 @@ export const trademarkBlacklist = pgTable('trademark_blacklist', {
   reason: varchar('reason', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+export const settings = pgTable('settings', {
+  id: serial('id').primaryKey(),
+  key: varchar('key', { length: 100 }).notNull().unique(),
+  value: text('value').notNull(),
+  description: varchar('description', { length: 255 }),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});

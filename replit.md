@@ -6,6 +6,17 @@ The Craffteine Assistant is an AI-powered chatbot designed to guide users in cre
 
 ## Recent Changes
 
+**November 28, 2025 - Admin Panel**
+- ✅ Created password-protected admin panel at `/admin`
+- ✅ Bot Instructions Editor: Edit AI behavior and personality without code changes
+- ✅ Flavors Manager: Add/remove flavors, toggle stock status
+- ✅ Ingredients Manager: Add/remove ingredients with dosage ranges
+- ✅ Formula History: View all customer-created formulas
+- ✅ Session-based authentication with 24-hour expiry
+- ✅ Settings stored in database (settings table)
+- Admin password: Set via `ADMIN_PASSWORD` environment variable
+- Status: Full admin panel working
+
 **November 27, 2025 - In-Chat Checkout & Order Confirmation**
 - ✅ Created InChatCheckout component with order summary card
 - ✅ Displays formula name, format, goal, ingredients with dosages

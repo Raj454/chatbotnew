@@ -7,6 +7,9 @@ import { AIBotIcon } from './components/icons/AIBotIcon';
 import { sessionService } from './services/sessionService';
 import { formulaService } from './services/formulaService';
 import craffteineLogo from './src/assets/craffteine-text-logo.png';
+import AdminPanel from './components/AdminPanel';
+
+const isAdminPage = window.location.pathname === '/admin';
 
 // This key is for demonstration. In a production app, this should be handled securely on a backend.
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
@@ -727,4 +730,11 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+function AppWrapper() {
+  if (isAdminPage) {
+    return <AdminPanel />;
+  }
+  return <App />;
+}
+
+export default AppWrapper;

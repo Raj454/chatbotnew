@@ -5,8 +5,12 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import rateLimit from 'express-rate-limit';
 import { db, seedDatabase } from './db/index.js';
-import { ingredients as ingredientsTable, flavors as flavorsTable, formulas as formulasTable, trademarkBlacklist } from './db/schema.js';
+import { ingredients as ingredientsTable, flavors as flavorsTable, formulas as formulasTable, trademarkBlacklist, settings as settingsTable } from './db/schema.js';
 import { eq, desc } from 'drizzle-orm';
+import crypto from 'crypto';
+
+// Admin session storage (in-memory for simplicity, consider using Redis in production)
+const adminSessions = new Map();
 
 dotenv.config();
 
@@ -516,8 +520,153 @@ app.post('/api/shopify/checkout', apiLimiter, async (req, res) => {
 
 // ============ ADMIN PANEL ROUTES ============
 
+// Admin authentication middleware
+const requireAdmin = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  
+  const token = authHeader.split(' ')[1];
+  if (!adminSessions.has(token)) {
+    return res.status(401).json({ success: false, error: 'Invalid or expired session' });
+  }
+  
+  next();
+};
+
+// Admin login
+app.post('/api/admin/login', apiLimiter, (req, res) => {
+  const { password } = req.body;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  
+  if (!adminPassword) {
+    return res.status(500).json({ success: false, error: 'Admin password not configured' });
+  }
+  
+  if (password !== adminPassword) {
+    return res.status(401).json({ success: false, error: 'Invalid password' });
+  }
+  
+  // Generate session token
+  const token = crypto.randomBytes(32).toString('hex');
+  adminSessions.set(token, { createdAt: Date.now() });
+  
+  // Clean up old sessions (older than 24 hours)
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  for (const [key, value] of adminSessions.entries()) {
+    if (Date.now() - value.createdAt > ONE_DAY) {
+      adminSessions.delete(key);
+    }
+  }
+  
+  res.json({ success: true, token });
+});
+
+// Admin logout
+app.post('/api/admin/logout', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    adminSessions.delete(token);
+  }
+  res.json({ success: true });
+});
+
+// Verify admin session
+app.get('/api/admin/verify', requireAdmin, (req, res) => {
+  res.json({ success: true });
+});
+
+// Get all settings
+app.get('/api/admin/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await db.select().from(settingsTable);
+    res.json({ success: true, data: settings });
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch settings' });
+  }
+});
+
+// Get single setting by key
+app.get('/api/admin/settings/:key', requireAdmin, async (req, res) => {
+  try {
+    const { key } = req.params;
+    const result = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
+    
+    if (result.length === 0) {
+      return res.status(404).json({ success: false, error: 'Setting not found' });
+    }
+    
+    res.json({ success: true, data: result[0] });
+  } catch (error) {
+    console.error('Error fetching setting:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch setting' });
+  }
+});
+
+// Update setting
+app.put('/api/admin/settings/:key', requireAdmin, async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body;
+    
+    if (!value) {
+      return res.status(400).json({ success: false, error: 'Value is required' });
+    }
+    
+    const result = await db.update(settingsTable)
+      .set({ value, updatedAt: new Date() })
+      .where(eq(settingsTable.key, key))
+      .returning();
+    
+    if (result.length === 0) {
+      return res.status(404).json({ success: false, error: 'Setting not found' });
+    }
+    
+    res.json({ success: true, data: result[0] });
+  } catch (error) {
+    console.error('Error updating setting:', error);
+    res.status(500).json({ success: false, error: 'Failed to update setting' });
+  }
+});
+
+// Get all ingredients (for admin)
+app.get('/api/admin/ingredients', requireAdmin, async (req, res) => {
+  try {
+    const ingredients = await db.select().from(ingredientsTable);
+    res.json({ success: true, data: ingredients });
+  } catch (error) {
+    console.error('Error fetching ingredients:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch ingredients' });
+  }
+});
+
+// Get all flavors (for admin)
+app.get('/api/admin/flavors', requireAdmin, async (req, res) => {
+  try {
+    const flavors = await db.select().from(flavorsTable);
+    res.json({ success: true, data: flavors });
+  } catch (error) {
+    console.error('Error fetching flavors:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch flavors' });
+  }
+});
+
+// Get all formulas (for admin)
+app.get('/api/admin/formulas', requireAdmin, async (req, res) => {
+  try {
+    const formulas = await db.select().from(formulasTable).orderBy(desc(formulasTable.createdAt));
+    res.json({ success: true, data: formulas });
+  } catch (error) {
+    console.error('Error fetching formulas:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch formulas' });
+  }
+});
+
 // Add ingredient
-app.post('/api/admin/ingredients', apiLimiter, async (req, res) => {
+app.post('/api/admin/ingredients', requireAdmin, async (req, res) => {
   try {
     const { name, category, dosageMin, dosageMax, unit, description } = req.body;
     
@@ -541,8 +690,38 @@ app.post('/api/admin/ingredients', apiLimiter, async (req, res) => {
   }
 });
 
+// Update ingredient
+app.put('/api/admin/ingredients/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, category, dosageMin, dosageMax, unit, description } = req.body;
+
+    const result = await db.update(ingredientsTable)
+      .set({ name, category, dosageMin: dosageMin?.toString(), dosageMax: dosageMax?.toString(), unit, description })
+      .where(eq(ingredientsTable.id, parseInt(id)))
+      .returning();
+
+    res.json({ success: true, data: result[0] });
+  } catch (error) {
+    console.error('Error updating ingredient:', error);
+    res.status(500).json({ success: false, error: 'Failed to update ingredient' });
+  }
+});
+
+// Delete ingredient
+app.delete('/api/admin/ingredients/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.delete(ingredientsTable).where(eq(ingredientsTable.id, parseInt(id)));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting ingredient:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete ingredient' });
+  }
+});
+
 // Add flavor
-app.post('/api/admin/flavors', apiLimiter, async (req, res) => {
+app.post('/api/admin/flavors', requireAdmin, async (req, res) => {
   try {
     const { name, inStock } = req.body;
     
@@ -563,13 +742,13 @@ app.post('/api/admin/flavors', apiLimiter, async (req, res) => {
 });
 
 // Update flavor status
-app.put('/api/admin/flavors/:id', apiLimiter, async (req, res) => {
+app.put('/api/admin/flavors/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { inStock } = req.body;
+    const { name, inStock } = req.body;
 
     const result = await db.update(flavorsTable)
-      .set({ inStock })
+      .set({ name, inStock })
       .where(eq(flavorsTable.id, parseInt(id)))
       .returning();
 
@@ -577,6 +756,18 @@ app.put('/api/admin/flavors/:id', apiLimiter, async (req, res) => {
   } catch (error) {
     console.error('Error updating flavor:', error);
     res.status(500).json({ success: false, error: 'Failed to update flavor' });
+  }
+});
+
+// Delete flavor
+app.delete('/api/admin/flavors/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.delete(flavorsTable).where(eq(flavorsTable.id, parseInt(id)));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting flavor:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete flavor' });
   }
 });
 
