@@ -679,19 +679,21 @@ app.get('/api/admin/formulas', requireAdmin, async (req, res) => {
 // Add ingredient
 app.post('/api/admin/ingredients', requireAdmin, async (req, res) => {
   try {
-    const { name, category, dosageMin, dosageMax, unit, description } = req.body;
+    const { name, blend, dosageMin, dosageMax, dosageSuggested, unit, description } = req.body;
     
-    if (!name || !category || !dosageMin || !dosageMax) {
-      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    if (!name || !blend || !dosageMin || !dosageMax) {
+      return res.status(400).json({ success: false, error: 'Missing required fields (name, blend, dosageMin, dosageMax)' });
     }
 
     const result = await db.insert(ingredientsTable).values({
       name,
-      category,
+      blend,
       dosageMin: dosageMin.toString(),
       dosageMax: dosageMax.toString(),
+      dosageSuggested: dosageSuggested ? dosageSuggested.toString() : null,
       unit: unit || 'mg',
-      description
+      description,
+      inStock: true
     }).returning();
 
     res.json({ success: true, data: result[0] });
@@ -705,10 +707,25 @@ app.post('/api/admin/ingredients', requireAdmin, async (req, res) => {
 app.put('/api/admin/ingredients/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, dosageMin, dosageMax, unit, description } = req.body;
+    const { name, blend, dosageMin, dosageMax, dosageSuggested, unit, description, inStock } = req.body;
+
+    // Build update object with only defined values
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (blend !== undefined) updateData.blend = blend;
+    if (dosageMin !== undefined) updateData.dosageMin = dosageMin.toString();
+    if (dosageMax !== undefined) updateData.dosageMax = dosageMax.toString();
+    if (dosageSuggested !== undefined) updateData.dosageSuggested = dosageSuggested ? dosageSuggested.toString() : null;
+    if (unit !== undefined) updateData.unit = unit;
+    if (description !== undefined) updateData.description = description;
+    if (inStock !== undefined) updateData.inStock = inStock;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
 
     const result = await db.update(ingredientsTable)
-      .set({ name, category, dosageMin: dosageMin?.toString(), dosageMax: dosageMax?.toString(), unit, description })
+      .set(updateData)
       .where(eq(ingredientsTable.id, parseInt(id)))
       .returning();
 
