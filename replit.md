@@ -6,6 +6,22 @@ The Craffteine Assistant is an AI-powered chatbot designed to guide users in cre
 
 ## Recent Changes
 
+**November 28, 2025 - Bot Instructions System & Admin Panel Enhancements**
+- ✅ Created dedicated config file `config/botInstructions.ts` for detailed bot logic
+- ✅ Admin Panel bot instructions now actually control the chatbot behavior
+- ✅ Two-level customization system:
+  - **Admin Panel** (database): Simple changes - tone, greeting, goals, safety flags, synergies
+  - **Config File** (code): Detailed logic - conversation flow, JSON format, dosage rules
+- ✅ Bot instructions fetched from database with 60-second cache
+- ✅ Public API endpoint `/api/settings/bot_instructions` for chatbot access
+- ✅ Added detailed instructions for dosage sliders (ingredient_sliders inputType)
+- ✅ Goal options with emojis: Energy⚡, Hydration💧, Focus🧠, Relax🌙, Immunity🛡, etc.
+- ✅ Mimic Mode instructions for copying known drinks
+- ✅ Safety combos to flag: Ashwagandha+Melatonin, multi-stimulants, etc.
+- ✅ Synergies to recommend: Caffeine+L-Theanine, VitC+Zinc, etc.
+- ✅ Ingredient sliders now appear correctly after Experience step
+- Status: Full bot instruction customization working
+
 **November 28, 2025 - Admin Panel & Blend Organization**
 - ✅ Created password-protected admin panel at `/admin`
 - ✅ Bot Instructions Editor: Edit AI behavior and personality without code changes
