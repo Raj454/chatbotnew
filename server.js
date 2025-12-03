@@ -169,15 +169,20 @@ app.get('/api/settings/bot_instructions', async (req, res) => {
 // Save formula
 app.post('/api/formulas', apiLimiter, async (req, res) => {
   try {
-    const { sessionId, shopifyCustomerId, formulaData, ...components } = req.body;
+    const { sessionId, shopifyCustomerId, customerEmail, customerName, formulaData, ...components } = req.body;
     
     if (!sessionId || !formulaData) {
       return res.status(400).json({ success: false, error: 'sessionId and formulaData required' });
     }
 
+    // Normalize email for consistent lookups (lowercase, trimmed)
+    const normalizedEmail = customerEmail ? customerEmail.toLowerCase().trim() : null;
+
     const result = await db.insert(formulasTable).values({
       sessionId,
       shopifyCustomerId,
+      customerEmail: normalizedEmail,
+      customerName,
       formulaData: JSON.stringify(formulaData),
       ...components
     }).returning();
@@ -223,6 +228,49 @@ app.get('/api/formulas/customer/:customerId', async (req, res) => {
   } catch (error) {
     console.error('Error fetching customer formulas:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch formulas' });
+  }
+});
+
+// Look up returning customer by email (for guests who ordered before)
+app.get('/api/customer/lookup', async (req, res) => {
+  try {
+    const { email } = req.query;
+    
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+    
+    // Find all formulas with this email
+    const formulas = await db.select().from(formulasTable)
+      .where(eq(formulasTable.customerEmail, email.toLowerCase().trim()))
+      .orderBy(desc(formulasTable.createdAt));
+    
+    if (formulas.length === 0) {
+      return res.json({ 
+        success: true, 
+        isReturningCustomer: false,
+        data: null 
+      });
+    }
+    
+    // Get the customer name from most recent order (if available)
+    const customerName = formulas[0].customerName || null;
+    
+    // Return summary of their history
+    res.json({ 
+      success: true, 
+      isReturningCustomer: true,
+      data: {
+        name: customerName,
+        email: email,
+        formulaCount: formulas.length,
+        lastFormula: formulas[0],
+        formulas: formulas.slice(0, 5) // Last 5 formulas
+      }
+    });
+  } catch (error) {
+    console.error('Error looking up customer:', error);
+    res.status(500).json({ success: false, error: 'Failed to look up customer' });
   }
 });
 

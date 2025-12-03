@@ -2,6 +2,8 @@
 export interface FormulaData {
   sessionId: string;
   shopifyCustomerId?: string;
+  customerEmail?: string;
+  customerName?: string;
   goalComponent?: string;
   formatComponent?: string;
   routineComponent?: string;

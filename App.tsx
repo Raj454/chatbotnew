@@ -6,6 +6,7 @@ import { SparklesIcon } from './components/icons/SparklesIcon';
 import { AIBotIcon } from './components/icons/AIBotIcon';
 import { sessionService } from './services/sessionService';
 import { formulaService } from './services/formulaService';
+import { lookupCustomerByEmail, getReturningCustomerGreeting, CustomerHistory } from './services/customerService';
 import craffteineLogo from './src/assets/craffteine-text-logo.png';
 import AdminPanel from './components/AdminPanel';
 
@@ -280,6 +281,7 @@ const App: React.FC = () => {
   } | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
   const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [customerHistory, setCustomerHistory] = useState<CustomerHistory | null>(null);
 
   const conversationHistoryRef = useRef<Message[]>([]);
   const lastUserRequestAt = useRef<number>(0);
@@ -293,7 +295,22 @@ const App: React.FC = () => {
   // Initialize session and load any saved formula on mount
   useEffect(() => {
     const initializeSession = async () => {
+      // Initialize session from URL params (for embedded widget)
+      sessionService.initFromUrlParams();
+      
       const sessionId = sessionIdRef.current;
+      
+      // Check if user is logged into Shopify (passed via widget params)
+      const customerEmail = sessionService.getCustomerEmail();
+      const customerId = sessionService.getCustomerId();
+      
+      // If we have email, check if returning customer
+      if (customerEmail) {
+        const lookup = await lookupCustomerByEmail(customerEmail);
+        if (lookup.isReturningCustomer && lookup.data) {
+          setCustomerHistory(lookup.data);
+        }
+      }
       
       // Try to load formula from database if this session has one
       const savedFormula = await formulaService.getFormulaBySession(sessionId);
@@ -378,10 +395,16 @@ const App: React.FC = () => {
     setHasStarted(true);
     setIsTyping(true);
 
+    // Check if we have customer history for personalized greeting
+    let welcomeText = "Let's create your perfect wellness formula! 💜✨";
+    if (customerHistory) {
+      welcomeText = getReturningCustomerGreeting(customerHistory);
+    }
+
     const welcomeMessage: Message = {
       id: 'start',
       sender: 'bot',
-      text: "Let's create your perfect wellness formula! 💜✨",
+      text: welcomeText,
     };
     setMessages([welcomeMessage]);
 
@@ -550,10 +573,12 @@ const App: React.FC = () => {
                     const toString = (val: any): string | undefined => 
                         typeof val === 'string' ? val : Array.isArray(val) ? val.join(', ') : undefined;
                     
-                    // Save to local database
+                    // Save to local database with customer info for returning customer recognition
                     await formulaService.saveFormula({
                         sessionId: sessionIdRef.current,
                         shopifyCustomerId: sessionService.getCustomerId() || undefined,
+                        customerEmail: sessionService.getCustomerEmail() || undefined,
+                        customerName: sessionService.getCustomerName() || undefined,
                         goalComponent: toString(finalFormula.Goal),
                         formatComponent: toString(finalFormula.Format),
                         routineComponent: toString(finalFormula.Routine),

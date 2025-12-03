@@ -17,6 +17,9 @@
     widgetUrl = 'https://craffteine-chat.replit.app/';
   }
 
+  // Build query params for the widget
+  const widgetParams = new URLSearchParams();
+
   // Check if returning from checkout with order_complete parameter
   const urlParams = new URLSearchParams(window.location.search);
   const orderComplete = urlParams.get('order_complete');
@@ -26,13 +29,46 @@
   
   // Pass order_complete parameter to iframe if present
   if (orderComplete === 'true' || localStorageComplete === 'true') {
-    widgetUrl += '?order_complete=true';
+    widgetParams.set('order_complete', 'true');
     // Clean up
     localStorage.removeItem('craffteine_order_complete');
     if (orderComplete === 'true') {
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, document.title, cleanUrl);
     }
+  }
+
+  // Get Shopify customer data if available (Shopify Liquid exposes this globally)
+  // This works when customer is logged into Shopify store
+  if (typeof window.__st !== 'undefined' && window.__st.cid) {
+    widgetParams.set('customer_id', window.__st.cid);
+  }
+  
+  // Alternative: Check for Shopify's customer object (set by theme)
+  if (typeof window.ShopifyAnalytics !== 'undefined' && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.page) {
+    const customerId = window.ShopifyAnalytics.meta.page.customerId;
+    if (customerId) {
+      widgetParams.set('customer_id', customerId.toString());
+    }
+  }
+  
+  // Check for craffteine_customer global set by Liquid template
+  if (typeof window.craffteine_customer !== 'undefined' && window.craffteine_customer) {
+    if (window.craffteine_customer.id) {
+      widgetParams.set('customer_id', window.craffteine_customer.id.toString());
+    }
+    if (window.craffteine_customer.email) {
+      widgetParams.set('customer_email', window.craffteine_customer.email);
+    }
+    if (window.craffteine_customer.name) {
+      widgetParams.set('customer_name', window.craffteine_customer.name);
+    }
+  }
+
+  // Add params to URL if any exist
+  const paramString = widgetParams.toString();
+  if (paramString) {
+    widgetUrl += '?' + paramString;
   }
 
   const container = document.createElement("div");

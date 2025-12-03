@@ -40,6 +40,8 @@ export const formulas = pgTable('formulas', {
   id: serial('id').primaryKey(),
   sessionId: varchar('session_id', { length: 100 }).notNull(),
   shopifyCustomerId: varchar('shopify_customer_id', { length: 100 }),
+  customerEmail: varchar('customer_email', { length: 255 }),
+  customerName: varchar('customer_name', { length: 255 }),
   goalComponent: varchar('goal_component', { length: 50 }),
   formatComponent: varchar('format_component', { length: 50 }),
   routineComponent: varchar('routine_component', { length: 50 }),
