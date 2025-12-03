@@ -52,7 +52,7 @@ interface Formula {
   createdAt: string;
 }
 
-type Tab = 'instructions' | 'sweeteners' | 'flavors' | 'ingredients' | 'formulas';
+type Tab = 'instructions' | 'sweeteners' | 'flavors' | 'blends' | 'ingredients' | 'formulas';
 
 export function AdminPanel() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -73,6 +73,7 @@ export function AdminPanel() {
 
   const [newFlavor, setNewFlavor] = useState('');
   const [newSweetener, setNewSweetener] = useState({ name: '', description: '' });
+  const [newBlend, setNewBlend] = useState('');
   const [newIngredient, setNewIngredient] = useState({ name: '', blend: '', dosageMin: '', dosageMax: '', dosageSuggested: '', unit: 'mg' });
 
   useEffect(() => {
@@ -142,7 +143,7 @@ export function AdminPanel() {
         fetch('/api/admin/sweeteners', { headers }),
         fetch('/api/admin/ingredients', { headers }),
         fetch('/api/admin/formulas', { headers }),
-        fetch('/api/admin/blends-public')
+        fetch('/api/admin/blends', { headers })
       ]);
 
       const [settingsData, flavorsData, sweetenersData, ingredientsData, formulasData, blendsData] = await Promise.all([
@@ -296,6 +297,45 @@ export function AdminPanel() {
     }
   };
 
+  const addBlend = async () => {
+    if (!newBlend.trim()) return;
+    try {
+      const res = await fetch('/api/admin/blends', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: newBlend })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBlends([...blends, data.data]);
+        setNewBlend('');
+      }
+    } catch (error) {
+      console.error('Error adding blend:', error);
+    }
+  };
+
+  const deleteBlend = async (id: number, blendName: string) => {
+    const ingredientsInBlend = ingredients.filter(ing => ing.blend === blendName);
+    if (ingredientsInBlend.length > 0) {
+      alert(`Cannot delete "${blendName}" - it has ${ingredientsInBlend.length} ingredient(s) assigned to it. Please reassign or delete those ingredients first.`);
+      return;
+    }
+    if (!confirm(`Delete blend "${blendName}"?`)) return;
+    try {
+      await fetch(`/api/admin/blends/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setBlends(blends.filter(b => b.id !== id));
+    } catch (error) {
+      console.error('Error deleting blend:', error);
+    }
+  };
+
   const addIngredient = async () => {
     if (!newIngredient.name.trim() || !newIngredient.blend || !newIngredient.dosageMin || !newIngredient.dosageMax) return;
     try {
@@ -398,7 +438,7 @@ export function AdminPanel() {
       <div className="max-w-6xl mx-auto p-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="flex border-b border-gray-200 overflow-x-auto">
-            {(['instructions', 'sweeteners', 'flavors', 'ingredients', 'formulas'] as Tab[]).map((tab) => (
+            {(['instructions', 'sweeteners', 'flavors', 'blends', 'ingredients', 'formulas'] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -570,6 +610,57 @@ export function AdminPanel() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'blends' && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Manage blend categories for organizing your ingredients. The Ingredients tab dropdown uses these blends.
+                    </p>
+                    <div className="mb-6">
+                      <h3 className="font-medium text-gray-800 mb-2">Add New Blend</h3>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newBlend}
+                          onChange={(e) => setNewBlend(e.target.value)}
+                          placeholder="e.g., SLEEP+, RECOVERY+"
+                          className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <button
+                          onClick={addBlend}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {blends.map((blend) => {
+                        const ingredientCount = ingredients.filter(i => i.blend === blend.name).length;
+                        return (
+                          <div
+                            key={blend.id}
+                            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                          >
+                            <div>
+                              <span className="font-medium text-gray-800">{blend.name}</span>
+                              <span className="ml-3 text-sm text-gray-500">
+                                ({ingredientCount} ingredient{ingredientCount !== 1 ? 's' : ''})
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => deleteBlend(blend.id, blend.name)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

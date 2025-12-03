@@ -900,6 +900,101 @@ app.delete('/api/admin/sweeteners/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ========== BLENDS ADMIN ENDPOINTS ==========
+
+// Get all blends (public - for ingredients dropdown)
+app.get('/api/blends', async (req, res) => {
+  try {
+    const allBlends = await db.select().from(blendsTable).orderBy(blendsTable.displayOrder);
+    res.json({ success: true, data: allBlends });
+  } catch (error) {
+    console.error('Error fetching blends:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch blends' });
+  }
+});
+
+// Get all blends (for admin)
+app.get('/api/admin/blends', requireAdmin, async (req, res) => {
+  try {
+    const blends = await db.select().from(blendsTable).orderBy(blendsTable.displayOrder);
+    res.json({ success: true, data: blends });
+  } catch (error) {
+    console.error('Error fetching blends:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch blends' });
+  }
+});
+
+// Add new blend
+app.post('/api/admin/blends', requireAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Blend name is required' });
+    }
+    const maxOrder = await db.select().from(blendsTable).orderBy(blendsTable.displayOrder);
+    const nextOrder = maxOrder.length > 0 ? Math.max(...maxOrder.map(b => b.displayOrder)) + 1 : 1;
+    
+    const result = await db.insert(blendsTable).values({
+      name,
+      displayOrder: nextOrder
+    }).returning();
+    res.json({ success: true, data: result[0] });
+  } catch (error) {
+    console.error('Error adding blend:', error);
+    res.status(500).json({ success: false, error: 'Failed to add blend' });
+  }
+});
+
+// Update blend
+app.put('/api/admin/blends/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Blend name is required' });
+    }
+
+    const result = await db.update(blendsTable)
+      .set({ name })
+      .where(eq(blendsTable.id, parseInt(id)))
+      .returning();
+
+    res.json({ success: true, data: result[0] });
+  } catch (error) {
+    console.error('Error updating blend:', error);
+    res.status(500).json({ success: false, error: 'Failed to update blend' });
+  }
+});
+
+// Delete blend (with server-side protection for assigned ingredients)
+app.delete('/api/admin/blends/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // First, get the blend name to check for assigned ingredients
+    const blend = await db.select().from(blendsTable).where(eq(blendsTable.id, parseInt(id))).limit(1);
+    if (blend.length === 0) {
+      return res.status(404).json({ success: false, error: 'Blend not found' });
+    }
+    
+    // Check if any ingredients are assigned to this blend
+    const assignedIngredients = await db.select().from(ingredientsTable).where(eq(ingredientsTable.blend, blend[0].name));
+    if (assignedIngredients.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Cannot delete "${blend[0].name}" - ${assignedIngredients.length} ingredient(s) are assigned to it. Please reassign or delete those ingredients first.` 
+      });
+    }
+    
+    await db.delete(blendsTable).where(eq(blendsTable.id, parseInt(id)));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting blend:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete blend' });
+  }
+});
+
 // Serve the React app for all non-API routes (must be last)
 app.use((req, res) => {
   res.sendFile(join(__dirname, 'dist', 'index.html'));
