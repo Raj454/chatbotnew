@@ -6,6 +6,19 @@ The Craffteine Assistant is an AI-powered chatbot designed to guide users in cre
 
 ## Recent Changes
 
+**December 3, 2025 - Sweeteners Manager Feature**
+- ✅ Created sweeteners database table with name, description, inStock fields
+- ✅ Public API endpoint `/api/sweeteners` for chatbot access
+- ✅ Admin CRUD endpoints `/api/admin/sweeteners` for management
+- ✅ Added Sweeteners Manager tab to Admin Panel (5th tab)
+  - Add new sweeteners with name and description
+  - Toggle stock status (in/out of stock)
+  - Delete sweeteners
+- ✅ Seeded with 4 default sweeteners: Stevia, Monk Fruit, Allulose, Erythritol
+- ✅ Chatbot reads sweeteners from database with 60-second cache
+- ✅ Inventory context includes both sweeteners and flavors
+- Status: Full sweeteners management working
+
 **November 28, 2025 - Bot Instructions System & Admin Panel Enhancements**
 - ✅ Created dedicated config file `config/botInstructions.ts` for detailed bot logic
 - ✅ Admin Panel bot instructions now actually control the chatbot behavior
