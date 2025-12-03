@@ -15,6 +15,14 @@ interface Flavor {
   createdAt: string;
 }
 
+interface Sweetener {
+  id: number;
+  name: string;
+  description: string | null;
+  inStock: boolean;
+  createdAt: string;
+}
+
 interface Ingredient {
   id: number;
   name: string;
@@ -44,7 +52,7 @@ interface Formula {
   createdAt: string;
 }
 
-type Tab = 'instructions' | 'flavors' | 'ingredients' | 'formulas';
+type Tab = 'instructions' | 'sweeteners' | 'flavors' | 'ingredients' | 'formulas';
 
 export function AdminPanel() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -57,12 +65,14 @@ export function AdminPanel() {
 
   const [botInstructions, setBotInstructions] = useState('');
   const [flavors, setFlavors] = useState<Flavor[]>([]);
+  const [sweeteners, setSweeteners] = useState<Sweetener[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [blends, setBlends] = useState<Blend[]>([]);
   const [formulas, setFormulas] = useState<Formula[]>([]);
   const [selectedBlendFilter, setSelectedBlendFilter] = useState<string>('all');
 
   const [newFlavor, setNewFlavor] = useState('');
+  const [newSweetener, setNewSweetener] = useState({ name: '', description: '' });
   const [newIngredient, setNewIngredient] = useState({ name: '', blend: '', dosageMin: '', dosageMax: '', dosageSuggested: '', unit: 'mg' });
 
   useEffect(() => {
@@ -126,17 +136,19 @@ export function AdminPanel() {
     try {
       const headers = { Authorization: `Bearer ${t}` };
       
-      const [settingsRes, flavorsRes, ingredientsRes, formulasRes, blendsRes] = await Promise.all([
+      const [settingsRes, flavorsRes, sweetenersRes, ingredientsRes, formulasRes, blendsRes] = await Promise.all([
         fetch('/api/admin/settings', { headers }),
         fetch('/api/admin/flavors', { headers }),
+        fetch('/api/admin/sweeteners', { headers }),
         fetch('/api/admin/ingredients', { headers }),
         fetch('/api/admin/formulas', { headers }),
         fetch('/api/admin/blends-public')
       ]);
 
-      const [settingsData, flavorsData, ingredientsData, formulasData, blendsData] = await Promise.all([
+      const [settingsData, flavorsData, sweetenersData, ingredientsData, formulasData, blendsData] = await Promise.all([
         settingsRes.json(),
         flavorsRes.json(),
+        sweetenersRes.json(),
         ingredientsRes.json(),
         formulasRes.json(),
         blendsRes.json()
@@ -147,6 +159,7 @@ export function AdminPanel() {
         if (instructions) setBotInstructions(instructions.value);
       }
       if (flavorsData.success) setFlavors(flavorsData.data);
+      if (sweetenersData.success) setSweeteners(sweetenersData.data);
       if (ingredientsData.success) setIngredients(ingredientsData.data);
       if (formulasData.success) setFormulas(formulasData.data);
       if (blendsData.success) {
@@ -230,6 +243,56 @@ export function AdminPanel() {
       setFlavors(flavors.filter(f => f.id !== id));
     } catch (error) {
       console.error('Error deleting flavor:', error);
+    }
+  };
+
+  const toggleSweetenerStock = async (id: number, currentStock: boolean) => {
+    try {
+      await fetch(`/api/admin/sweeteners/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ inStock: !currentStock })
+      });
+      setSweeteners(sweeteners.map(s => s.id === id ? { ...s, inStock: !currentStock } : s));
+    } catch (error) {
+      console.error('Error toggling sweetener:', error);
+    }
+  };
+
+  const addSweetener = async () => {
+    if (!newSweetener.name.trim()) return;
+    try {
+      const res = await fetch('/api/admin/sweeteners', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: newSweetener.name, description: newSweetener.description || null, inStock: true })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSweeteners([...sweeteners, data.data]);
+        setNewSweetener({ name: '', description: '' });
+      }
+    } catch (error) {
+      console.error('Error adding sweetener:', error);
+    }
+  };
+
+  const deleteSweetener = async (id: number) => {
+    if (!confirm('Delete this sweetener?')) return;
+    try {
+      await fetch(`/api/admin/sweeteners/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSweeteners(sweeteners.filter(s => s.id !== id));
+    } catch (error) {
+      console.error('Error deleting sweetener:', error);
     }
   };
 
@@ -334,12 +397,12 @@ export function AdminPanel() {
 
       <div className="max-w-6xl mx-auto p-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="flex border-b border-gray-200">
-            {(['instructions', 'flavors', 'ingredients', 'formulas'] as Tab[]).map((tab) => (
+          <div className="flex border-b border-gray-200 overflow-x-auto">
+            {(['instructions', 'sweeteners', 'flavors', 'ingredients', 'formulas'] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-4 font-medium text-sm capitalize ${
+                className={`px-6 py-4 font-medium text-sm capitalize whitespace-nowrap ${
                   activeTab === tab
                     ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
                     : 'text-gray-500 hover:text-gray-700'
@@ -384,6 +447,78 @@ export function AdminPanel() {
                     >
                       {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : saveStatus === 'error' ? 'Error - Try Again' : 'Save Changes'}
                     </button>
+                  </div>
+                )}
+
+                {activeTab === 'sweeteners' && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Manage natural sweetener options for Stick Pack formulas. Only in-stock sweeteners are shown to customers.
+                    </p>
+                    <div className="mb-6">
+                      <h3 className="font-medium text-gray-800 mb-2">Add New Sweetener</h3>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newSweetener.name}
+                          onChange={(e) => setNewSweetener({ ...newSweetener, name: e.target.value })}
+                          placeholder="Sweetener name"
+                          className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <input
+                          type="text"
+                          value={newSweetener.description}
+                          onChange={(e) => setNewSweetener({ ...newSweetener, description: e.target.value })}
+                          placeholder="Description (optional)"
+                          className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <button
+                          onClick={addSweetener}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {sweeteners.map((sweetener) => (
+                        <div
+                          key={sweetener.id}
+                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                        >
+                          <div>
+                            <span className="font-medium text-gray-800">{sweetener.name}</span>
+                            {sweetener.description && (
+                              <p className="text-sm text-gray-500">{sweetener.description}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => toggleSweetenerStock(sweetener.id, sweetener.inStock)}
+                              className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                sweetener.inStock
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-red-100 text-red-700'
+                              }`}
+                            >
+                              {sweetener.inStock ? 'In Stock' : 'Out of Stock'}
+                            </button>
+                            <button
+                              onClick={() => deleteSweetener(sweetener.id)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {sweeteners.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                          No sweeteners added yet. Add some natural sweeteners above.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

@@ -20,10 +20,19 @@ interface DBBlend {
   displayOrder: number;
 }
 
+interface DBSweetener {
+  id: number;
+  name: string;
+  description: string | null;
+  inStock: boolean | null;
+}
+
 let cachedIngredients: DBIngredient[] | null = null;
 let cachedBlends: DBBlend[] | null = null;
+let cachedSweeteners: DBSweetener[] | null = null;
 let cachedBotInstructions: string | null = null;
 let cacheTimestamp: number = 0;
+let sweetenersCacheTimestamp: number = 0;
 let botInstructionsCacheTimestamp: number = 0;
 const CACHE_TTL = 60000;
 
@@ -76,6 +85,27 @@ async function fetchIngredientsFromDB(): Promise<{ blends: DBBlend[], ingredient
   }
 
   return { blends: [], ingredients: [] };
+}
+
+async function fetchSweetenersFromDB(): Promise<DBSweetener[]> {
+  const now = Date.now();
+  if (cachedSweeteners && (now - sweetenersCacheTimestamp) < CACHE_TTL) {
+    return cachedSweeteners;
+  }
+
+  try {
+    const res = await fetch('/api/sweeteners');
+    if (res.ok) {
+      const data = await res.json();
+      cachedSweeteners = data.data || [];
+      sweetenersCacheTimestamp = now;
+      return cachedSweeteners!;
+    }
+  } catch (error) {
+    console.error('Error fetching sweeteners from DB:', error);
+  }
+
+  return [];
 }
 
 function buildIngredientsPrompt(blends: DBBlend[], ingredients: DBIngredient[]): string {
@@ -396,31 +426,39 @@ const buildPersonaSummary = (formula: Formula): string => {
 };
 
 // Helper to build inventory context for AI
-const buildInventoryContext = (): string => {
+const buildInventoryContext = async (): Promise<string> => {
     const flavorList = inventoryService.getFlavorListForPrompt();
     const summary = inventoryService.getInventorySummary();
     const maxFlavors = inventoryService.getMaxFlavorSelections();
     
+    // Fetch sweeteners from database
+    const sweeteners = await fetchSweetenersFromDB();
+    const inStockSweeteners = sweeteners.filter(s => s.inStock !== false);
+    const sweetenerList = inStockSweeteners.map(s => s.name).join(', ');
+    
     return `**CURRENT INVENTORY STATUS:**
 ${summary}
+
+**AVAILABLE SWEETENERS (Stick Packs only, natural only):**
+${sweetenerList || 'Stevia, Monk Fruit, Allulose, Erythritol'}
 
 **AVAILABLE FLAVORS (Stick Packs only, max ${maxFlavors}):**
 ${flavorList}
 
-Only suggest flavors from this list. If user asks for a flavor not on this list, tell them to email suggest@craffteine.com`;
+Only suggest sweeteners and flavors from these lists. If user asks for something not on the list, tell them to email suggest@craffteine.com`;
 };
 
 // Helper to format conversation history for OpenAI
-const formatHistory = (history: Message[], formula: Formula, systemInstructionText: string): { role: 'user' | 'assistant' | 'system'; content: string }[] => {
+const formatHistory = async (history: Message[], formula: Formula, systemInstructionText: string): Promise<{ role: 'user' | 'assistant' | 'system'; content: string }[]> => {
     const formatted: { role: 'user' | 'assistant' | 'system'; content: string }[] = [{
         role: 'system',
         content: systemInstructionText
     }];
     
-    // Add inventory context (flavors and stock status)
+    // Add inventory context (flavors, sweeteners, and stock status)
     formatted.push({
         role: 'system',
-        content: buildInventoryContext()
+        content: await buildInventoryContext()
     });
     
     // Track which components have been asked
@@ -480,7 +518,7 @@ export const getNextStep = async (apiKey: string, history: Message[], formula: F
     const ingredientsPrompt = buildIngredientsPrompt(blends, ingredients);
     const systemInstructionText = await buildSystemInstruction(ingredientsPrompt);
     
-    let messages = formatHistory(history, formula, systemInstructionText);
+    let messages = await formatHistory(history, formula, systemInstructionText);
     let attemptCount = 0;
     const maxAttempts = 5;
     

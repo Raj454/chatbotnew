@@ -28,6 +28,14 @@ export const flavors = pgTable('flavors', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+export const sweeteners = pgTable('sweeteners', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  description: text('description'),
+  inStock: boolean('in_stock').default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 export const formulas = pgTable('formulas', {
   id: serial('id').primaryKey(),
   sessionId: varchar('session_id', { length: 100 }).notNull(),

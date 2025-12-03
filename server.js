@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import rateLimit from 'express-rate-limit';
 import { db, seedDatabase } from './db/index.js';
-import { ingredients as ingredientsTable, flavors as flavorsTable, formulas as formulasTable, trademarkBlacklist, settings as settingsTable, blends as blendsTable } from './db/schema.js';
+import { ingredients as ingredientsTable, flavors as flavorsTable, sweeteners as sweetenersTable, formulas as formulasTable, trademarkBlacklist, settings as settingsTable, blends as blendsTable } from './db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import crypto from 'crypto';
 
@@ -136,6 +136,17 @@ app.get('/api/flavors', async (req, res) => {
   } catch (error) {
     console.error('Error fetching flavors:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch flavors' });
+  }
+});
+
+// Get all sweeteners (public - for AI chatbot)
+app.get('/api/sweeteners', async (req, res) => {
+  try {
+    const allSweeteners = await db.select().from(sweetenersTable);
+    res.json({ success: true, data: allSweeteners });
+  } catch (error) {
+    console.error('Error fetching sweeteners:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch sweeteners' });
   }
 });
 
@@ -812,6 +823,80 @@ app.delete('/api/admin/flavors/:id', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error deleting flavor:', error);
     res.status(500).json({ success: false, error: 'Failed to delete flavor' });
+  }
+});
+
+// ============ SWEETENERS ADMIN ROUTES ============
+
+// Get all sweeteners (for admin)
+app.get('/api/admin/sweeteners', requireAdmin, async (req, res) => {
+  try {
+    const sweeteners = await db.select().from(sweetenersTable);
+    res.json({ success: true, data: sweeteners });
+  } catch (error) {
+    console.error('Error fetching sweeteners:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch sweeteners' });
+  }
+});
+
+// Add sweetener
+app.post('/api/admin/sweeteners', requireAdmin, async (req, res) => {
+  try {
+    const { name, description, inStock } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Sweetener name required' });
+    }
+
+    const result = await db.insert(sweetenersTable).values({
+      name,
+      description: description || null,
+      inStock: inStock !== false
+    }).returning();
+
+    res.json({ success: true, data: result[0] });
+  } catch (error) {
+    console.error('Error adding sweetener:', error);
+    res.status(500).json({ success: false, error: 'Failed to add sweetener' });
+  }
+});
+
+// Update sweetener
+app.put('/api/admin/sweeteners/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, inStock } = req.body;
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (inStock !== undefined) updateData.inStock = inStock;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
+
+    const result = await db.update(sweetenersTable)
+      .set(updateData)
+      .where(eq(sweetenersTable.id, parseInt(id)))
+      .returning();
+
+    res.json({ success: true, data: result[0] });
+  } catch (error) {
+    console.error('Error updating sweetener:', error);
+    res.status(500).json({ success: false, error: 'Failed to update sweetener' });
+  }
+});
+
+// Delete sweetener
+app.delete('/api/admin/sweeteners/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.delete(sweetenersTable).where(eq(sweetenersTable.id, parseInt(id)));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting sweetener:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete sweetener' });
   }
 });
 

@@ -88,6 +88,18 @@ export async function seedDatabase() {
       ]);
     }
 
+    const existingSweeteners = await db.select().from(schema.sweeteners).limit(1);
+    if (existingSweeteners.length === 0) {
+      console.log('🌱 Seeding sweeteners...');
+      await db.insert(schema.sweeteners).values([
+        { name: 'Stevia', description: 'Zero-calorie natural sweetener from the stevia plant', inStock: true },
+        { name: 'Monk Fruit', description: 'Natural sweetener from monk fruit, zero calories', inStock: true },
+        { name: 'Allulose', description: 'Rare sugar with minimal calories and no glycemic impact', inStock: true },
+        { name: 'Erythritol', description: 'Sugar alcohol with zero calories and cooling effect', inStock: true },
+      ]);
+      console.log('✅ Seeded 4 sweeteners');
+    }
+
     const existingSettings = await db.select().from(schema.settings).limit(1);
     if (existingSettings.length === 0) {
       console.log('🌱 Seeding settings...');
