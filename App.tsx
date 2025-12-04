@@ -507,10 +507,20 @@ const App: React.FC = () => {
         sessionService.setCustomerEmail(trimmedEmail);
         setCustomerHistory(lookup.data);
         
+        // Transform formulas into display format
+        const savedFormulas = lookup.data.formulas.map((f: any) => ({
+          id: f.id,
+          name: f.formulaNameComponent || 'Custom Formula',
+          createdAt: f.createdAt,
+          goal: f.goalComponent,
+          format: f.formatComponent,
+        }));
+        
         const foundMessage: Message = {
           id: 'found-customer',
           sender: 'bot',
-          text: `Welcome back! 🎉 I found your account.`,
+          text: `Welcome back! 🎉 I found your account. Here are your saved formulas:`,
+          savedFormulas: savedFormulas,
         };
         setMessages(prev => [...prev, foundMessage]);
         // Pass the history data directly to avoid React state timing issues

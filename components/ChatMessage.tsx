@@ -43,6 +43,41 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           </div>
         )}
         
+        {message.savedFormulas && message.savedFormulas.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {message.savedFormulas.map((formula) => (
+              <div 
+                key={formula.id}
+                className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-4 hover:shadow-md transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-purple-800 text-base">
+                      {formula.name}
+                    </div>
+                    <div className="flex gap-2 mt-1 flex-wrap">
+                      {formula.goal && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                          {formula.goal}
+                        </span>
+                      )}
+                      {formula.format && (
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                          {formula.format}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Created {new Date(formula.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div className="text-2xl">📦</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
         {message.selectedIngredients && (
           <div className="bg-purple-50 px-4 py-3 rounded-2xl border border-purple-200">
             <div className="flex items-center gap-2 mb-3">

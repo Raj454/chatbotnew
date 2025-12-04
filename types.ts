@@ -23,6 +23,14 @@ export interface SelectedIngredient {
   unit: string;
 }
 
+export interface SavedFormula {
+  id: number;
+  name: string;
+  createdAt: string;
+  goal?: string;
+  format?: string;
+}
+
 export interface Message {
   id: string;
   sender: Sender;
@@ -38,6 +46,7 @@ export interface Message {
   pendingConfirmation?: boolean; // Whether bot is awaiting confirmation for extracted value
   extractedValue?: string; // The value bot extracted and is asking for confirmation
   collectEmail?: boolean; // Whether to show email input for returning customer check
+  savedFormulas?: SavedFormula[]; // List of saved formulas for returning customers
 }
 
 export interface SliderConfig {
