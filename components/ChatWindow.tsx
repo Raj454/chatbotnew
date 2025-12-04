@@ -28,6 +28,7 @@ interface ChatWindowProps {
   onCreateAnother?: () => void;
   isCollectingEmail?: boolean;
   onEmailSubmit?: (email: string) => void;
+  onReorder?: (formulaId: number) => void;
 }
 
 const ChatInput: React.FC<{ 
@@ -159,7 +160,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onCheckoutComplete,
   onCreateAnother,
   isCollectingEmail = false,
-  onEmailSubmit
+  onEmailSubmit,
+  onReorder
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessage = messages[messages.length - 1];
@@ -200,7 +202,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
           {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
+            <ChatMessage key={msg.id} message={msg} onReorder={onReorder} />
           ))}
           {isTyping && <TypingIndicator />}
         </div>

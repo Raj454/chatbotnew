@@ -5,9 +5,10 @@ import { AIBotIcon } from './icons/AIBotIcon';
 
 interface ChatMessageProps {
   message: Message;
+  onReorder?: (formulaId: number) => void;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onReorder }) => {
   const isBot = message.sender === 'bot';
   
   if (isBot && !message.text && !message.formulaSummary) {
@@ -51,7 +52,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                 className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-4 hover:shadow-md transition-all"
               >
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex-1">
                     <div className="font-bold text-purple-800 text-base">
                       {formula.name}
                     </div>
@@ -71,7 +72,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                       Created {new Date(formula.createdAt).toLocaleDateString()}
                     </div>
                   </div>
-                  <div className="text-2xl">📦</div>
+                  <button
+                    onClick={() => onReorder?.(formula.id)}
+                    className="bg-gradient-to-r from-purple-600 to-pink-500 text-white px-4 py-2 rounded-full text-sm font-semibold hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1"
+                  >
+                    🔄 Reorder
+                  </button>
                 </div>
               </div>
             ))}

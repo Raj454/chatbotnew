@@ -392,6 +392,71 @@ const App: React.FC = () => {
     handleStart();
   };
 
+  const handleReorder = async (formulaId: number) => {
+    try {
+      setIsTyping(true);
+      
+      // Fetch the formula details from the server
+      const response = await fetch(`/api/formulas/${formulaId}`);
+      const result = await response.json();
+      
+      if (!result.success || !result.data) {
+        const errorMessage: Message = {
+          id: 'reorder-error',
+          sender: 'bot',
+          text: "Sorry, I couldn't find that formula. Let's create a new one instead!",
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        setIsTyping(false);
+        return;
+      }
+      
+      const formulaData = result.data;
+      
+      // Add confirmation message
+      const reorderMessage: Message = {
+        id: 'reorder-confirm',
+        sender: 'bot',
+        text: `Great choice! 🎉 Reordering "${formulaData.formulaNameComponent}"... Taking you to checkout!`,
+      };
+      setMessages(prev => [...prev, reorderMessage]);
+      
+      // Build checkout URL with the formula data
+      const queryParams = new URLSearchParams();
+      
+      if (formulaData.goalComponent) queryParams.set('Goal', formulaData.goalComponent);
+      if (formulaData.formatComponent) queryParams.set('Format', formulaData.formatComponent);
+      if (formulaData.formulaNameComponent) queryParams.set('FormulaName', formulaData.formulaNameComponent);
+      if (formulaData.formulaData) {
+        try {
+          const parsedFormula = JSON.parse(formulaData.formulaData);
+          Object.entries(parsedFormula).forEach(([key, val]) => {
+            if (val && key !== 'Goal' && key !== 'Format' && key !== 'FormulaName') {
+              queryParams.set(key, String(val));
+            }
+          });
+        } catch (e) {}
+      }
+      
+      const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://uu9bie-sk.myshopify.com';
+      const checkoutUrl = `${SHOPIFY_STORE_URL}/cart/add?id=YOUR_PRODUCT_ID&properties=${encodeURIComponent(queryParams.toString())}`;
+      
+      // For now, set the proceed URL to show the checkout
+      setProceedUrl(checkoutUrl);
+      setIsTyping(false);
+      
+    } catch (error) {
+      console.error('Error reordering formula:', error);
+      const errorMessage: Message = {
+        id: 'reorder-error',
+        sender: 'bot',
+        text: "Sorry, something went wrong. Let's create a new formula instead!",
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      setIsTyping(false);
+    }
+  };
+
   const handleStart = async () => {
     setHasStarted(true);
     setIsTyping(true);
@@ -875,6 +940,7 @@ const App: React.FC = () => {
             onCreateAnother={handleCreateAnother}
             isCollectingEmail={isCollectingEmail}
             onEmailSubmit={handleEmailSubmit}
+            onReorder={handleReorder}
           />
         </div>
       )}

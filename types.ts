@@ -29,6 +29,7 @@ export interface SavedFormula {
   createdAt: string;
   goal?: string;
   format?: string;
+  formulaData?: string;
 }
 
 export interface Message {
