@@ -397,7 +397,7 @@ const App: React.FC = () => {
       setIsTyping(true);
       
       // Fetch the formula details from the server
-      const response = await fetch(`/api/formulas/${formulaId}`);
+      const response = await fetch(`/api/formula/${formulaId}`);
       const result = await response.json();
       
       if (!result.success || !result.data) {

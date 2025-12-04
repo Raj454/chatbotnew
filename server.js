@@ -215,6 +215,31 @@ app.get('/api/formulas/:sessionId', async (req, res) => {
   }
 });
 
+// Get formula by numeric ID (for reorder feature)
+app.get('/api/formula/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const formulaId = parseInt(id, 10);
+    
+    if (isNaN(formulaId)) {
+      return res.status(400).json({ success: false, error: 'Invalid formula ID' });
+    }
+    
+    const formula = await db.select().from(formulasTable)
+      .where(eq(formulasTable.id, formulaId))
+      .limit(1);
+
+    if (formula.length === 0) {
+      return res.status(404).json({ success: false, error: 'Formula not found' });
+    }
+
+    res.json({ success: true, data: formula[0] });
+  } catch (error) {
+    console.error('Error fetching formula by ID:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch formula' });
+  }
+});
+
 // Get formulas by Shopify customer ID
 app.get('/api/formulas/customer/:customerId', async (req, res) => {
   try {
