@@ -417,32 +417,70 @@ const App: React.FC = () => {
       const reorderMessage: Message = {
         id: 'reorder-confirm',
         sender: 'bot',
-        text: `Great choice! 🎉 Reordering "${formulaData.formulaNameComponent}"... Taking you to checkout!`,
+        text: `Great choice! 🎉 Reordering "${formulaData.formulaNameComponent}"... Creating your checkout!`,
       };
       setMessages(prev => [...prev, reorderMessage]);
       
-      // Build checkout URL with the formula data
-      const queryParams = new URLSearchParams();
+      // Parse the saved formula data to get ingredients
+      let ingredients: Array<{ name: string; dosage: number; unit: string }> = [];
+      let parsedFormula: any = {};
       
-      if (formulaData.goalComponent) queryParams.set('Goal', formulaData.goalComponent);
-      if (formulaData.formatComponent) queryParams.set('Format', formulaData.formatComponent);
-      if (formulaData.formulaNameComponent) queryParams.set('FormulaName', formulaData.formulaNameComponent);
       if (formulaData.formulaData) {
         try {
-          const parsedFormula = JSON.parse(formulaData.formulaData);
-          Object.entries(parsedFormula).forEach(([key, val]) => {
-            if (val && key !== 'Goal' && key !== 'Format' && key !== 'FormulaName') {
-              queryParams.set(key, String(val));
-            }
-          });
-        } catch (e) {}
+          parsedFormula = JSON.parse(formulaData.formulaData);
+          
+          // Parse dosages if available
+          if (parsedFormula.Dosage && typeof parsedFormula.Dosage === 'string') {
+            const dosageMap = JSON.parse(parsedFormula.Dosage);
+            ingredients = Object.entries(dosageMap).map(([name, dosage]) => ({
+              name,
+              dosage: dosage as number,
+              unit: 'mg'
+            }));
+          }
+        } catch (e) {
+          console.error('Error parsing formula data:', e);
+        }
       }
       
-      const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://uu9bie-sk.myshopify.com';
-      const checkoutUrl = `${SHOPIFY_STORE_URL}/cart/add?id=YOUR_PRODUCT_ID&properties=${encodeURIComponent(queryParams.toString())}`;
+      // Create Shopify checkout using the same API as regular checkout
+      const shopifyResponse = await fetch('/api/shopify/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formulaName: formulaData.formulaNameComponent || 'Custom Formula',
+          ingredients,
+          format: formulaData.formatComponent || parsedFormula.Format || 'Stick Pack',
+          goal: formulaData.goalComponent || parsedFormula.Goal || 'Energy',
+          sweetener: parsedFormula.Sweetener,
+          flavors: parsedFormula.Flavors
+        })
+      });
       
-      // For now, set the proceed URL to show the checkout
-      setProceedUrl(checkoutUrl);
+      const shopifyData = await shopifyResponse.json();
+      
+      if (shopifyData.success && shopifyData.checkoutUrl) {
+        // Set up checkout summary for display
+        setCheckoutSummary({
+          name: formulaData.formulaNameComponent || 'Custom Formula',
+          format: formulaData.formatComponent || 'Stick Pack',
+          goal: formulaData.goalComponent || 'Energy',
+          ingredients,
+          sweetener: parsedFormula.Sweetener,
+          flavors: parsedFormula.Flavors,
+          price: shopifyData.price
+        });
+        setProceedUrl(shopifyData.checkoutUrl);
+      } else {
+        // Fallback - show error message
+        const errorMessage: Message = {
+          id: 'checkout-error',
+          sender: 'bot',
+          text: "Sorry, there was an issue creating the checkout. Please try again or create a new formula.",
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+      
       setIsTyping(false);
       
     } catch (error) {
