@@ -282,6 +282,7 @@ const App: React.FC = () => {
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
   const [orderConfirmed, setOrderConfirmed] = useState(false);
   const [customerHistory, setCustomerHistory] = useState<CustomerHistory | null>(null);
+  const [isCollectingEmail, setIsCollectingEmail] = useState(false);
 
   const conversationHistoryRef = useRef<Message[]>([]);
   const lastUserRequestAt = useRef<number>(0);
@@ -302,9 +303,8 @@ const App: React.FC = () => {
       
       // Check if user is logged into Shopify (passed via widget params)
       const customerEmail = sessionService.getCustomerEmail();
-      const customerId = sessionService.getCustomerId();
       
-      // If we have email, check if returning customer
+      // If we have email from Shopify, check if returning customer
       if (customerEmail) {
         const lookup = await lookupCustomerByEmail(customerEmail);
         if (lookup.isReturningCustomer && lookup.data) {
@@ -337,9 +337,9 @@ const App: React.FC = () => {
       
       // Add confirmation message to chat
       setMessages(prev => [...prev, {
-        id: Date.now(),
+        id: Date.now().toString(),
+        sender: 'bot' as const,
         text: "Your order has been confirmed! Thank you for your purchase. Your custom formula will be on its way soon.",
-        isUser: false
       }]);
     }
   }, []);
@@ -370,6 +370,7 @@ const App: React.FC = () => {
     setCheckoutSummary(null);
     setCooldownRemainingMs(0);
     setOrderConfirmed(false);
+    setIsCollectingEmail(false);
     lastUserRequestAt.current = 0;
     sessionIdRef.current = sessionService.getSessionId();
     ingredientsRef.current = [];
@@ -395,6 +396,30 @@ const App: React.FC = () => {
     setHasStarted(true);
     setIsTyping(true);
 
+    // Check if user is logged in via Shopify
+    const customerEmail = sessionService.getCustomerEmail();
+    
+    // If not logged in, ask for email first
+    if (!customerEmail && !customerHistory) {
+      const emailPromptMessage: Message = {
+        id: 'email-prompt',
+        sender: 'bot',
+        text: "Welcome to Craffteine! 👋 Have you created a formula with us before? Enter your email to see your previous formulas, or type 'new' to start fresh.",
+        collectEmail: true,
+      };
+      setMessages([emailPromptMessage]);
+      setIsCollectingEmail(true);
+      setIsTyping(false);
+      return;
+    }
+
+    // User is logged in or we already have history - proceed normally
+    await startMainConversation();
+  };
+
+  const startMainConversation = async () => {
+    setIsTyping(true);
+    
     // Check if we have customer history for personalized greeting
     let welcomeText = "Let's create your perfect wellness formula! 💜✨";
     if (customerHistory) {
@@ -406,7 +431,13 @@ const App: React.FC = () => {
       sender: 'bot',
       text: welcomeText,
     };
-    setMessages([welcomeMessage]);
+    
+    // If we already have messages (from email collection), add to them
+    if (messages.length > 0) {
+      setMessages(prev => [...prev, welcomeMessage]);
+    } else {
+      setMessages([welcomeMessage]);
+    }
 
     // FIX: Pass an empty formula object as the third argument to getNextStep.
     const response = await getNextStep(OPENAI_API_KEY, [], {});
@@ -422,6 +453,86 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, errorMessage]);
     }
     setIsTyping(false);
+  };
+
+  const handleEmailSubmit = async (email: string) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    
+    // Add user's response to messages
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      sender: 'user',
+      text: email,
+    };
+    setMessages(prev => [...prev, userMessage]);
+    setIsTyping(true);
+    setIsCollectingEmail(false);
+    
+    // Check if user wants to skip
+    if (trimmedEmail === 'new' || trimmedEmail === 'skip' || trimmedEmail === 'no') {
+      const skipMessage: Message = {
+        id: 'skip-email',
+        sender: 'bot',
+        text: "No problem! Let's create your first formula together. 🎉",
+      };
+      setMessages(prev => [...prev, skipMessage]);
+      await startMainConversation();
+      return;
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      const invalidMessage: Message = {
+        id: 'invalid-email',
+        sender: 'bot',
+        text: "That doesn't look like a valid email. Please enter a valid email address, or type 'new' to start fresh.",
+        collectEmail: true,
+      };
+      setMessages(prev => [...prev, invalidMessage]);
+      setIsCollectingEmail(true);
+      setIsTyping(false);
+      return;
+    }
+    
+    // Look up the email
+    try {
+      const lookup = await lookupCustomerByEmail(trimmedEmail);
+      
+      if (lookup.isReturningCustomer && lookup.data) {
+        // Store the email for later use
+        sessionService.setCustomerEmail(trimmedEmail);
+        setCustomerHistory(lookup.data);
+        
+        const foundMessage: Message = {
+          id: 'found-customer',
+          sender: 'bot',
+          text: `Welcome back! 🎉 I found your account.`,
+        };
+        setMessages(prev => [...prev, foundMessage]);
+        await startMainConversation();
+      } else {
+        // Email not found - new customer
+        const notFoundMessage: Message = {
+          id: 'not-found',
+          sender: 'bot',
+          text: "I don't see any previous formulas with that email, but no worries! Let's create your first one. 🌟",
+        };
+        setMessages(prev => [...prev, notFoundMessage]);
+        // Store email for when they complete a formula
+        sessionService.setCustomerEmail(trimmedEmail);
+        await startMainConversation();
+      }
+    } catch (error) {
+      console.error('Error looking up customer:', error);
+      const errorMessage: Message = {
+        id: 'lookup-error',
+        sender: 'bot',
+        text: "I had trouble checking your email. Let's start fresh for now!",
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      await startMainConversation();
+    }
   };
   
   const handleSelection = async (value: string | string[], component: string) => {
@@ -515,7 +626,7 @@ const App: React.FC = () => {
                         max: ing.max,
                         suggested: dosageMap[ing.name] || ing.suggested,
                         unit: ing.unit,
-                        rationale: ing.rationale
+                        rationale: ing.rationale || ''
                     })),
                     goal: finalFormula.Goal,
                     sweetener: finalFormula.Sweetener,
@@ -748,6 +859,8 @@ const App: React.FC = () => {
             orderConfirmed={orderConfirmed}
             onCheckoutComplete={handleCheckoutComplete}
             onCreateAnother={handleCreateAnother}
+            isCollectingEmail={isCollectingEmail}
+            onEmailSubmit={handleEmailSubmit}
           />
         </div>
       )}

@@ -37,6 +37,7 @@ export interface Message {
   formulaSummary?: FormulaSummary;
   pendingConfirmation?: boolean; // Whether bot is awaiting confirmation for extracted value
   extractedValue?: string; // The value bot extracted and is asking for confirmation
+  collectEmail?: boolean; // Whether to show email input for returning customer check
 }
 
 export interface SliderConfig {

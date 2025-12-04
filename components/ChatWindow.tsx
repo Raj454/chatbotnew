@@ -26,6 +26,8 @@ interface ChatWindowProps {
   orderConfirmed?: boolean;
   onCheckoutComplete?: () => void;
   onCreateAnother?: () => void;
+  isCollectingEmail?: boolean;
+  onEmailSubmit?: (email: string) => void;
 }
 
 const ChatInput: React.FC<{ 
@@ -101,6 +103,51 @@ const ChatInput: React.FC<{
   );
 };
 
+const EmailInput: React.FC<{ 
+  onSubmit: (email: string) => void; 
+  disabled: boolean;
+}> = ({ onSubmit, disabled }) => {
+  const [input, setInput] = React.useState('');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input.trim() && !disabled) {
+      onSubmit(input.trim());
+      setInput('');
+    }
+  };
+
+  React.useEffect(() => {
+    if (!disabled) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [disabled]);
+
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-2 items-center bg-gray-50 rounded-2xl border border-gray-200 px-4 py-2.5">
+      <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      </svg>
+      <input
+        ref={inputRef}
+        type="text"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Enter your email or type 'new'"
+        disabled={disabled}
+        className="flex-1 bg-transparent focus:outline-none text-gray-800 placeholder-gray-400 disabled:cursor-not-allowed text-sm"
+      />
+      <button type="submit" disabled={disabled || !input.trim()} className="text-purple-500 hover:text-purple-600 disabled:opacity-30 flex-shrink-0 font-medium text-sm">
+        Submit
+      </button>
+    </form>
+  );
+};
+
 const ChatWindow: React.FC<ChatWindowProps> = ({ 
   messages, 
   isTyping, 
@@ -110,12 +157,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   formulaSummary,
   orderConfirmed = false,
   onCheckoutComplete,
-  onCreateAnother
+  onCreateAnother,
+  isCollectingEmail = false,
+  onEmailSubmit
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessage = messages[messages.length - 1];
   const isLastMessageFromBot = lastMessage?.sender === 'bot';
-  const showChatInput = isLastMessageFromBot && lastMessage?.component && !proceedUrl;
+  const showChatInput = isLastMessageFromBot && lastMessage?.component && !proceedUrl && !isCollectingEmail;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -161,6 +210,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       <div className="border-t border-gray-200 bg-white sticky bottom-0">
         <div className="max-w-3xl mx-auto px-4 py-4">
           {renderInteractiveComponent()}
+          
+          {isCollectingEmail && !isTyping && onEmailSubmit && (
+            <EmailInput 
+              onSubmit={onEmailSubmit} 
+              disabled={isTyping}
+            />
+          )}
           
           {showChatInput && !isTyping && (
             <ChatInput 
