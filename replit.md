@@ -45,7 +45,11 @@ The frontend is a React 18 and TypeScript application, styled with Tailwind CSS.
   - `sweeteners`: Sweetener options.
   - `blends`: Categories for organizing ingredients (e.g., SLEEP+, RECOVERY+).
   - `settings`: Stores bot instructions and other configurations.
-- **Session Management:** Auto-generated UUID session IDs for guests, stored in `localStorage`. Future Shopify customer ID tracking. Formulas are auto-saved and auto-loaded.
+- **Session Management:** Auto-generated UUID session IDs for guests, stored in `localStorage`. Formulas are auto-saved and auto-loaded.
+- **Customer Recognition:** Two-path returning customer detection:
+  - **Logged-in Shopify users:** Automatic recognition via widget (window.craffteine_customer passed from Shopify Liquid template)
+  - **Non-logged-in users:** Email prompt at conversation start → database lookup → personalized greeting with saved formula cards
+- **Reorder Feature:** Returning customers see their saved formulas displayed as cards with "Reorder" buttons for quick checkout without going through the full conversation flow.
 - **Inventory Service:** `services/inventoryService.ts` handles stock data from the database, dynamically integrated into the AI's context for real-time availability.
 
 **Admin Panel (`/admin`):**
