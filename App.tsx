@@ -417,13 +417,16 @@ const App: React.FC = () => {
     await startMainConversation();
   };
 
-  const startMainConversation = async () => {
+  const startMainConversation = async (historyData?: CustomerHistory | null) => {
     setIsTyping(true);
+    
+    // Use passed history data or fall back to state (for logged-in users)
+    const history = historyData ?? customerHistory;
     
     // Check if we have customer history for personalized greeting
     let welcomeText = "Let's create your perfect wellness formula! 💜✨";
-    if (customerHistory) {
-      welcomeText = getReturningCustomerGreeting(customerHistory);
+    if (history) {
+      welcomeText = getReturningCustomerGreeting(history);
     }
 
     const welcomeMessage: Message = {
@@ -510,7 +513,8 @@ const App: React.FC = () => {
           text: `Welcome back! 🎉 I found your account.`,
         };
         setMessages(prev => [...prev, foundMessage]);
-        await startMainConversation();
+        // Pass the history data directly to avoid React state timing issues
+        await startMainConversation(lookup.data);
       } else {
         // Email not found - new customer
         const notFoundMessage: Message = {
