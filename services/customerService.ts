@@ -1,10 +1,10 @@
 // Customer lookup and returning customer detection service
+import { sessionService } from './sessionService';
 
 export interface CustomerHistory {
   name: string | null;
   email: string;
   formulaCount: number;
-  lastFormula: any;
   formulas: any[];
 }
 
@@ -16,9 +16,13 @@ export interface CustomerLookupResult {
 const API_BASE = '';
 
 // Look up customer by email to check if they're a returning customer
+// Requires session ID for security (prevents email enumeration)
 export async function lookupCustomerByEmail(email: string): Promise<CustomerLookupResult> {
   try {
-    const response = await fetch(`${API_BASE}/api/customer/lookup?email=${encodeURIComponent(email)}`);
+    const sessionId = sessionService.getSessionId();
+    const response = await fetch(
+      `${API_BASE}/api/customer/lookup?email=${encodeURIComponent(email)}&sessionId=${encodeURIComponent(sessionId)}`
+    );
     const data = await response.json();
     
     if (data.success) {
@@ -38,18 +42,19 @@ export async function lookupCustomerByEmail(email: string): Promise<CustomerLook
 // Generate personalized welcome message for returning customer
 export function getReturningCustomerGreeting(history: CustomerHistory): string {
   const name = history.name ? history.name.split(' ')[0] : null;
+  const lastFormula = history.formulas?.[0];
   
   if (name) {
     if (history.formulaCount === 1) {
-      return `Welcome back, ${name}! Great to see you again. Last time you created "${history.lastFormula?.formulaNameComponent || 'your custom formula'}" - shall we build something new today? 💪`;
+      return `Welcome back, ${name}! Great to see you again. Last time you created "${lastFormula?.formulaNameComponent || 'your custom formula'}" - shall we build something new today?`;
     } else {
-      return `Hey ${name}! You're back! 🎉 You've created ${history.formulaCount} formulas with us. Want to try something new or reorder a favorite?`;
+      return `Hey ${name}! You're back! You've created ${history.formulaCount} formulas with us. Want to try something new or reorder a favorite?`;
     }
   } else {
     if (history.formulaCount === 1) {
-      return `Welcome back! Last time you created "${history.lastFormula?.formulaNameComponent || 'a custom formula'}" - ready for another? 💪`;
+      return `Welcome back! Last time you created "${lastFormula?.formulaNameComponent || 'a custom formula'}" - ready for another?`;
     } else {
-      return `Hey, welcome back! 🎉 You've made ${history.formulaCount} formulas with us before. Ready to create another?`;
+      return `Hey, welcome back! You've made ${history.formulaCount} formulas with us before. Ready to create another?`;
     }
   }
 }
@@ -57,8 +62,7 @@ export function getReturningCustomerGreeting(history: CustomerHistory): string {
 // Check if we should ask for email (for new guests)
 export function shouldAskForEmail(
   isLoggedIn: boolean, 
-  hasEmail: boolean, 
-  sessionId: string
+  hasEmail: boolean
 ): boolean {
   // If logged into Shopify, we'll get email from checkout
   if (isLoggedIn) return false;

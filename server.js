@@ -24,7 +24,33 @@ const PORT = process.env.PORT || 3001;
 // This ensures rate limits apply per-user IP, not per-proxy IP
 app.set('trust proxy', 1);
 
-app.use(cors());
+// CORS configuration - restrict to allowed origins
+const allowedOrigins = [
+  'https://craffteine.com',
+  'https://www.craffteine.com',
+  'https://uu9bie-sk.myshopify.com',
+  process.env.RENDER_EXTERNAL_URL, // Render deployment URL
+  process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null,
+].filter(Boolean);
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.) in development
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.some(allowed => origin.startsWith(allowed) || origin.includes('replit'))) {
+      return callback(null, true);
+    }
+    
+    // Log blocked origins for debugging
+    console.warn(`CORS blocked origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'), false);
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // Server-side rate limiting: prevent API abuse and protect OpenAI quota
@@ -100,6 +126,376 @@ app.get('/api/search', apiLimiter, async (req, res) => {
     return res.status(500).json({ 
       success: false, 
       error: 'Web search temporarily unavailable' 
+    });
+  }
+});
+
+// ============ SECURE OPENAI CHAT API ============
+
+// Helper to format OpenAI errors into user-friendly messages
+const formatOpenAIError = (errorData) => {
+  const errorMessage = errorData?.error?.message || '';
+  
+  if (errorMessage.includes('Rate limit reached') || errorMessage.includes('rate_limit_exceeded')) {
+    return "Whoa, slow down! I need a quick breather. Please wait a few seconds and try again!";
+  }
+  if (errorMessage.includes('quota') || errorMessage.includes('insufficient_quota')) {
+    return "Oops, I've hit my daily limit! Please try again tomorrow or contact support.";
+  }
+  if (errorMessage.includes('Incorrect API key') || errorMessage.includes('invalid_api_key')) {
+    return "Hmm, there's a configuration issue. Please contact support!";
+  }
+  return "Sorry, I'm having trouble connecting right now. Please try again in a moment!";
+};
+
+// Function schemas for OpenAI function calling
+const functionSchemas = [
+  {
+    name: 'getCurrentTime',
+    description: 'Get the current time. Use this when the user asks what time it is.',
+    parameters: { type: 'object', properties: {}, required: [] }
+  },
+  {
+    name: 'getCurrentDate',
+    description: 'Get the current date. Use this when the user asks what day it is.',
+    parameters: { type: 'object', properties: {}, required: [] }
+  },
+  {
+    name: 'getWeather',
+    description: 'Get the current weather for a location.',
+    parameters: {
+      type: 'object',
+      properties: {
+        location: { type: 'string', description: 'The city or location to get weather for' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'calculate',
+    description: 'Perform mathematical calculations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'The mathematical expression to calculate' }
+      },
+      required: ['expression']
+    }
+  },
+  {
+    name: 'searchWeb',
+    description: 'Search for general knowledge information.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' }
+      },
+      required: ['query']
+    }
+  }
+];
+
+// Execute function calls server-side
+const executeFunctionCall = async (functionName, args = {}) => {
+  try {
+    switch (functionName) {
+      case 'getCurrentTime': {
+        const now = new Date();
+        return now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+      case 'getCurrentDate': {
+        const now = new Date();
+        return now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      }
+      case 'getWeather': {
+        const location = args?.location || 'New York';
+        try {
+          const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`);
+          const geoData = await geoRes.json();
+          if (!geoData.results || geoData.results.length === 0) {
+            return `Could not find weather for "${location}"`;
+          }
+          const { latitude, longitude, name } = geoData.results[0];
+          const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&temperature_unit=fahrenheit`);
+          const weatherData = await weatherRes.json();
+          const { temperature, weathercode } = weatherData.current_weather;
+          const conditions = weathercode <= 3 ? 'clear' : weathercode <= 48 ? 'cloudy' : weathercode <= 67 ? 'rainy' : 'stormy';
+          return `Current weather in ${name}: ${temperature}°F and ${conditions}`;
+        } catch (e) {
+          return 'Weather service temporarily unavailable';
+        }
+      }
+      case 'calculate': {
+        const expression = args?.expression || '';
+        try {
+          const sanitized = expression.replace(/[^0-9+\-*/().%\s]/g, '');
+          const result = Function('"use strict"; return (' + sanitized + ')')();
+          return `${expression} = ${result}`;
+        } catch (e) {
+          return `Could not calculate: ${expression}`;
+        }
+      }
+      case 'searchWeb': {
+        const query = args?.query || '';
+        const braveKey = process.env.BRAVE_SEARCH_API_KEY;
+        if (!braveKey) return 'Search service not configured';
+        try {
+          const res = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=3`, {
+            headers: { 'Accept': 'application/json', 'X-Subscription-Token': braveKey }
+          });
+          const data = await res.json();
+          if (data.web?.results?.length > 0) {
+            return data.web.results.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}\n   ${r.description}`).join('\n\n');
+          }
+          return `No results found for "${query}"`;
+        } catch (e) {
+          return 'Search temporarily unavailable';
+        }
+      }
+      default:
+        return `Unknown function: ${functionName}`;
+    }
+  } catch (error) {
+    console.error(`Error executing function ${functionName}:`, error);
+    return `Error executing ${functionName}`;
+  }
+};
+
+// Build ingredients prompt from database
+const buildIngredientsPrompt = (blends, ingredients) => {
+  const ingredientsByBlend = ingredients.reduce((acc, ing) => {
+    if (!acc[ing.blend]) acc[ing.blend] = [];
+    acc[ing.blend].push(ing);
+    return acc;
+  }, {});
+
+  const sortedBlends = blends.sort((a, b) => a.displayOrder - b.displayOrder);
+  
+  return sortedBlends.map(blend => {
+    const blendIngredients = ingredientsByBlend[blend.name] || [];
+    const inStockIngredients = blendIngredients.filter(ing => ing.inStock !== false);
+    return `${blend.name}: ${inStockIngredients.map(ing => `${ing.name} ${ing.dosageMin}-${ing.dosageMax}${ing.unit || 'mg'}`).join(', ')}`;
+  }).join('\n');
+};
+
+// Build persona summary for dosage decisions
+const buildPersonaSummary = (formula) => {
+  if (Object.keys(formula).length === 0) return '';
+  
+  const parts = ['**USER PERSONA SUMMARY FOR DOSAGE CALCULATION:**'];
+  
+  if (formula.Experience) {
+    const exp = String(formula.Experience).toLowerCase();
+    if (exp.includes('beginner') || exp.includes('new') || exp.includes('never')) {
+      parts.push('- Experience: BEGINNER → Use 40-60% of dosage range');
+    } else if (exp.includes('experienced') || exp.includes('advanced') || exp.includes('years')) {
+      parts.push('- Experience: ADVANCED → Use 80-100% of dosage range');
+    } else {
+      parts.push('- Experience: MODERATE → Use 60-80% of dosage range');
+    }
+  } else {
+    parts.push('- Experience: UNKNOWN (assume moderate) → Use 60-70% of dosage range');
+  }
+  
+  if (formula.Lifestyle || formula.Routine) {
+    const lifestyle = String(formula.Lifestyle || '').toLowerCase();
+    const routine = String(formula.Routine || '').toLowerCase();
+    const combined = lifestyle + ' ' + routine;
+    
+    if (combined.includes('athlete') || combined.includes('gym') || combined.includes('workout') || combined.includes('active')) {
+      parts.push('- Activity: HIGH → Increase dosages within experience range');
+    } else if (combined.includes('sedentary') || combined.includes('desk') || combined.includes('office')) {
+      parts.push('- Activity: LOW → Decrease dosages within experience range');
+    } else {
+      parts.push('- Activity: MODERATE → Standard dosages within experience range');
+    }
+  }
+  
+  if (formula.Sensitivities) {
+    const sens = String(formula.Sensitivities).toLowerCase();
+    if (sens.includes('caffeine') || sens.includes('stimulant')) {
+      parts.push('- ALERT: Caffeine/stimulant sensitivity → Reduce stimulants to 30-50% of range');
+    }
+    if (sens !== 'none' && sens !== 'no' && sens.length > 3) {
+      parts.push('- Sensitivities present → Use conservative dosages (40-60% of range)');
+    }
+  }
+  
+  if (formula.Goal) {
+    const goal = String(formula.Goal).toLowerCase();
+    if (goal.includes('energy') || goal.includes('focus') || goal.includes('performance')) {
+      parts.push('- Goal needs strong support → Use higher end within safety limits');
+    } else if (goal.includes('relax') || goal.includes('sleep') || goal.includes('calm')) {
+      parts.push('- Goal is relaxation → Use moderate dosages');
+    }
+  }
+  
+  parts.push('\n**YOU MUST use this persona summary to calculate personalized "suggested" dosages for each ingredient.**');
+  
+  return parts.join('\n');
+};
+
+// Secure Chat API endpoint - handles all OpenAI calls server-side
+app.post('/api/chat', apiLimiter, async (req, res) => {
+  try {
+    const { messages, formula = {}, systemInstruction } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ success: false, error: 'Messages array required' });
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    
+    if (!apiKey) {
+      console.error('OPENAI_API_KEY not found in environment');
+      return res.status(500).json({ success: false, error: 'AI service not configured' });
+    }
+
+    // Fetch ingredients and blends for context
+    const [allIngredients, allBlends, allSweeteners, botInstructionsResult] = await Promise.all([
+      db.select().from(ingredientsTable),
+      db.select().from(blendsTable),
+      db.select().from(sweetenersTable),
+      db.select().from(settingsTable).where(eq(settingsTable.key, 'bot_instructions'))
+    ]);
+
+    const ingredientsPrompt = buildIngredientsPrompt(allBlends, allIngredients);
+    const customBotInstructions = botInstructionsResult.length > 0 ? botInstructionsResult[0].value : null;
+    
+    // Build sweetener list
+    const inStockSweeteners = allSweeteners.filter(s => s.inStock !== false);
+    const sweetenerList = inStockSweeteners.map(s => s.name).join(', ') || 'Stevia, Monk Fruit, Allulose, Erythritol';
+
+    // Fetch flavors for context
+    const allFlavors = await db.select().from(flavorsTable);
+    const inStockFlavors = allFlavors.filter(f => f.inStock !== false);
+    const flavorList = inStockFlavors.map(f => f.name).join(', ') || 'Various flavors available';
+
+    // Build full system instruction
+    let fullSystemInstruction = systemInstruction || '';
+    
+    if (customBotInstructions && customBotInstructions.trim()) {
+      fullSystemInstruction = `**ADMIN CUSTOMIZATIONS (PRIORITY):**\n${customBotInstructions}\n\n---\n\n${fullSystemInstruction}`;
+    }
+
+    // Add inventory context
+    const inventoryContext = `**CURRENT INVENTORY STATUS:**
+Available ingredients and sweeteners are in stock.
+
+**AVAILABLE SWEETENERS (Stick Packs only, natural only):**
+${sweetenerList}
+
+**AVAILABLE FLAVORS (Stick Packs only, max 2):**
+${flavorList}
+
+Only suggest sweeteners and flavors from these lists.`;
+
+    // Add persona summary for dosage
+    const personaSummary = buildPersonaSummary(formula);
+    
+    // Build OpenAI messages array
+    const openaiMessages = [
+      { role: 'system', content: fullSystemInstruction },
+      { role: 'system', content: inventoryContext },
+    ];
+
+    // Add formula context if exists
+    if (Object.keys(formula).length > 0) {
+      const formulaSummary = Object.entries(formula).map(([component, value]) => 
+        `${component}: ${typeof value === 'object' ? JSON.stringify(value) : value}`
+      ).join(', ');
+      
+      openaiMessages.push({
+        role: 'system',
+        content: `Information already collected:\n${formulaSummary}\n\nDO NOT ask about these components again.\n\n${personaSummary}`
+      });
+    }
+
+    // Add conversation messages
+    messages.forEach(msg => {
+      const content = typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text);
+      openaiMessages.push({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: content
+      });
+    });
+
+    let attemptCount = 0;
+    const maxAttempts = 5;
+    let currentMessages = [...openaiMessages];
+
+    while (attemptCount < maxAttempts) {
+      attemptCount++;
+      
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: currentMessages,
+          functions: functionSchemas,
+          function_call: 'auto',
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('OpenAI API Error:', errorData);
+        return res.json({ 
+          success: false, 
+          error: formatOpenAIError(errorData) 
+        });
+      }
+
+      const data = await response.json();
+      const message = data.choices[0]?.message;
+
+      if (!message) {
+        return res.json({ success: false, error: 'Empty response from AI' });
+      }
+
+      // Handle function calls
+      if (message.function_call) {
+        const functionName = message.function_call.name;
+        const functionArgs = message.function_call.arguments ? JSON.parse(message.function_call.arguments) : {};
+        
+        console.log(`AI calling function: ${functionName}`, functionArgs);
+        
+        const functionResult = await executeFunctionCall(functionName, functionArgs);
+        
+        currentMessages.push({
+          role: 'assistant',
+          content: null,
+          function_call: message.function_call
+        });
+        
+        currentMessages.push({
+          role: 'function',
+          name: functionName,
+          content: functionResult
+        });
+        
+        // Continue loop for next API call with function result
+        continue;
+      }
+
+      // Got final response
+      return res.json({ 
+        success: true, 
+        message: message.content 
+      });
+    }
+
+    return res.json({ success: false, error: 'Max function call attempts reached' });
+
+  } catch (error) {
+    console.error('Chat API error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'AI service temporarily unavailable' 
     });
   }
 });
@@ -256,18 +652,44 @@ app.get('/api/formulas/customer/:customerId', async (req, res) => {
   }
 });
 
+// Stricter rate limiter for customer lookup (prevent email enumeration)
+const customerLookupLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // Max 5 lookups per minute per IP
+  message: { 
+    success: false, 
+    error: 'Too many lookup attempts, please wait a moment'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Look up returning customer by email (for guests who ordered before)
-app.get('/api/customer/lookup', async (req, res) => {
+// Security: Rate limited + requires session ID to prevent email enumeration
+app.get('/api/customer/lookup', customerLookupLimiter, async (req, res) => {
   try {
-    const { email } = req.query;
+    const { email, sessionId } = req.query;
     
     if (!email) {
       return res.status(400).json({ success: false, error: 'Email is required' });
     }
     
+    // Require a session ID to prevent random email enumeration
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.length < 10) {
+      return res.status(400).json({ success: false, error: 'Valid session required' });
+    }
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({ success: false, error: 'Invalid email format' });
+    }
+    
     // Find all formulas with this email
     const formulas = await db.select().from(formulasTable)
-      .where(eq(formulasTable.customerEmail, email.toLowerCase().trim()))
+      .where(eq(formulasTable.customerEmail, normalizedEmail))
       .orderBy(desc(formulasTable.createdAt));
     
     if (formulas.length === 0) {
@@ -281,16 +703,21 @@ app.get('/api/customer/lookup', async (req, res) => {
     // Get the customer name from most recent order (if available)
     const customerName = formulas[0].customerName || null;
     
-    // Return summary of their history
+    // Return limited summary (only essential data for reorder)
     res.json({ 
       success: true, 
       isReturningCustomer: true,
       data: {
         name: customerName,
-        email: email,
+        email: normalizedEmail,
         formulaCount: formulas.length,
-        lastFormula: formulas[0],
-        formulas: formulas.slice(0, 5) // Last 5 formulas
+        formulas: formulas.slice(0, 5).map(f => ({
+          id: f.id,
+          formulaNameComponent: f.formulaNameComponent,
+          goalComponent: f.goalComponent,
+          formatComponent: f.formatComponent,
+          createdAt: f.createdAt
+        }))
       }
     });
   } catch (error) {
