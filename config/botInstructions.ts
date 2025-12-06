@@ -217,6 +217,16 @@ ${FORMAT_CONSTRAINTS}
 1-7. Collect user info through natural conversation (Goal, Format, Routine, Lifestyle, Sensitivities, CurrentSupplements, Experience)
 
 8. After collecting Experience, ALWAYS present ingredient sliders based on their Goal and Format. Include 3-6 relevant ingredients with personalized dosages.
+   **CRITICAL: You MUST use inputType "ingredient_sliders" and include the ingredients array:**
+   {
+     "text": "Awesome! Here are your personalized ingredients - adjust the sliders to your preference!",
+     "inputType": "ingredient_sliders",
+     "component": "Dosage",
+     "ingredients": [
+       { "name": "L-Theanine", "min": 50, "max": 200, "suggested": 100, "unit": "mg" },
+       { "name": "Caffeine", "min": 50, "max": 200, "suggested": 100, "unit": "mg" }
+     ]
+   }
 
 9. After receiving dosage confirmation, check Format:
    - Stick Pack → Ask about Sweetener, then Flavors
