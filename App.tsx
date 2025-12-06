@@ -502,7 +502,7 @@ const App: React.FC = () => {
     // Check if user is logged in via Shopify
     const customerEmail = sessionService.getCustomerEmail();
     
-    // If not logged in, ask for email first
+    // If not logged in and no history, ask for email first
     if (!customerEmail && !customerHistory) {
       const emailPromptMessage: Message = {
         id: 'email-prompt',
@@ -516,7 +516,32 @@ const App: React.FC = () => {
       return;
     }
 
-    // User is logged in or we already have history - proceed normally
+    // User is logged in - check if they have saved formulas to show
+    if (customerHistory && customerHistory.formulas && customerHistory.formulas.length > 0) {
+      // Transform formulas into display format
+      const savedFormulas = customerHistory.formulas.map((f: any) => ({
+        id: f.id,
+        name: f.formulaNameComponent || 'Custom Formula',
+        createdAt: f.createdAt,
+        goal: f.goalComponent,
+        format: f.formatComponent,
+      }));
+      
+      const welcomeMessage: Message = {
+        id: 'welcome-returning',
+        sender: 'bot',
+        text: `Welcome back! 🎉 Here are your saved formulas:`,
+        savedFormulas: savedFormulas,
+      };
+      setMessages([welcomeMessage]);
+      setIsTyping(false);
+      
+      // Continue to main conversation after showing formulas
+      await startMainConversation(customerHistory);
+      return;
+    }
+
+    // User is logged in but no history - proceed normally
     await startMainConversation();
   };
 
