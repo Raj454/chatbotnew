@@ -527,17 +527,20 @@ const App: React.FC = () => {
         format: f.formatComponent,
       }));
       
+      // Get personalized greeting
+      const greeting = getReturningCustomerGreeting(customerHistory);
+      
       const welcomeMessage: Message = {
         id: 'welcome-returning',
         sender: 'bot',
-        text: `Welcome back! 🎉 Here are your saved formulas:`,
+        text: `${greeting}\n\nHere are your saved formulas - tap Reorder to quickly repurchase, or let's create something new:`,
         savedFormulas: savedFormulas,
       };
       setMessages([welcomeMessage]);
       setIsTyping(false);
       
-      // Continue to main conversation after showing formulas
-      await startMainConversation(customerHistory);
+      // Continue to main conversation, skip welcome since we already showed it
+      await startMainConversation(customerHistory, true);
       return;
     }
 
@@ -545,29 +548,32 @@ const App: React.FC = () => {
     await startMainConversation();
   };
 
-  const startMainConversation = async (historyData?: CustomerHistory | null) => {
+  const startMainConversation = async (historyData?: CustomerHistory | null, skipWelcome: boolean = false) => {
     setIsTyping(true);
     
     // Use passed history data or fall back to state (for logged-in users)
     const history = historyData ?? customerHistory;
     
-    // Check if we have customer history for personalized greeting
-    let welcomeText = "Let's create your perfect wellness formula! 💜✨";
-    if (history) {
-      welcomeText = getReturningCustomerGreeting(history);
-    }
+    // Only add welcome message if not skipping (i.e., we haven't already shown savedFormulas)
+    if (!skipWelcome) {
+      // Check if we have customer history for personalized greeting
+      let welcomeText = "Let's create your perfect wellness formula!";
+      if (history) {
+        welcomeText = getReturningCustomerGreeting(history);
+      }
 
-    const welcomeMessage: Message = {
-      id: 'start',
-      sender: 'bot',
-      text: welcomeText,
-    };
-    
-    // If we already have messages (from email collection), add to them
-    if (messages.length > 0) {
-      setMessages(prev => [...prev, welcomeMessage]);
-    } else {
-      setMessages([welcomeMessage]);
+      const welcomeMessage: Message = {
+        id: 'start',
+        sender: 'bot',
+        text: welcomeText,
+      };
+      
+      // If we already have messages (from email collection), add to them
+      if (messages.length > 0) {
+        setMessages(prev => [...prev, welcomeMessage]);
+      } else {
+        setMessages([welcomeMessage]);
+      }
     }
 
     // FIX: Pass an empty formula object as the third argument to getNextStep.
@@ -644,15 +650,18 @@ const App: React.FC = () => {
           format: f.formatComponent,
         }));
         
+        // Get personalized greeting
+        const greeting = getReturningCustomerGreeting(lookup.data);
+        
         const foundMessage: Message = {
           id: 'found-customer',
           sender: 'bot',
-          text: `Welcome back! 🎉 I found your account. Here are your saved formulas:`,
+          text: `${greeting}\n\nHere are your saved formulas - tap Reorder to quickly repurchase, or let's create something new:`,
           savedFormulas: savedFormulas,
         };
         setMessages(prev => [...prev, foundMessage]);
-        // Pass the history data directly to avoid React state timing issues
-        await startMainConversation(lookup.data);
+        // Pass the history data directly, skip welcome since we showed it
+        await startMainConversation(lookup.data, true);
       } else {
         // Email not found - new customer
         const notFoundMessage: Message = {
