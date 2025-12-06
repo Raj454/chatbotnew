@@ -12,6 +12,86 @@ import crypto from 'crypto';
 // Admin session storage (in-memory for simplicity, consider using Redis in production)
 const adminSessions = new Map();
 
+// In-memory cache for frequently accessed data (reduces DB queries per chat request)
+const dataCache = {
+  ingredients: null,
+  blends: null,
+  sweeteners: null,
+  flavors: null,
+  botInstructions: null,
+  lastUpdated: null
+};
+
+// Load all cached data from database
+async function loadCache() {
+  try {
+    const [ingredients, blends, sweeteners, flavors, botInstructionsResult] = await Promise.all([
+      db.select().from(ingredientsTable),
+      db.select().from(blendsTable),
+      db.select().from(sweetenersTable),
+      db.select().from(flavorsTable),
+      db.select().from(settingsTable).where(eq(settingsTable.key, 'bot_instructions'))
+    ]);
+    
+    dataCache.ingredients = ingredients;
+    dataCache.blends = blends;
+    dataCache.sweeteners = sweeteners;
+    dataCache.flavors = flavors;
+    dataCache.botInstructions = botInstructionsResult.length > 0 ? botInstructionsResult[0].value : '';
+    dataCache.lastUpdated = new Date();
+    
+    console.log('✅ Data cache loaded:', {
+      ingredients: ingredients.length,
+      blends: blends.length,
+      sweeteners: sweeteners.length,
+      flavors: flavors.length,
+      hasBotInstructions: !!dataCache.botInstructions
+    });
+  } catch (error) {
+    console.error('❌ Failed to load cache:', error);
+  }
+}
+
+// Get cached data with fallback to database
+async function getCachedIngredients() {
+  if (!dataCache.ingredients) await loadCache();
+  return dataCache.ingredients || [];
+}
+
+async function getCachedBlends() {
+  if (!dataCache.blends) await loadCache();
+  return dataCache.blends || [];
+}
+
+async function getCachedSweeteners() {
+  if (!dataCache.sweeteners) await loadCache();
+  return dataCache.sweeteners || [];
+}
+
+async function getCachedFlavors() {
+  if (!dataCache.flavors) await loadCache();
+  return dataCache.flavors || [];
+}
+
+async function getCachedBotInstructions() {
+  if (dataCache.botInstructions === null) await loadCache();
+  return dataCache.botInstructions || '';
+}
+
+// Invalidate specific cache entries (call after admin updates)
+function invalidateCache(type = 'all') {
+  if (type === 'all') {
+    dataCache.ingredients = null;
+    dataCache.blends = null;
+    dataCache.sweeteners = null;
+    dataCache.flavors = null;
+    dataCache.botInstructions = null;
+  } else {
+    dataCache[type] = null;
+  }
+  console.log(`🔄 Cache invalidated: ${type}`);
+}
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -351,23 +431,22 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
       return res.status(500).json({ success: false, error: 'AI service not configured' });
     }
 
-    // Fetch ingredients and blends for context
-    const [allIngredients, allBlends, allSweeteners, botInstructionsResult] = await Promise.all([
-      db.select().from(ingredientsTable),
-      db.select().from(blendsTable),
-      db.select().from(sweetenersTable),
-      db.select().from(settingsTable).where(eq(settingsTable.key, 'bot_instructions'))
+    // Use cached data instead of database queries (major performance improvement)
+    const [allIngredients, allBlends, allSweeteners, allFlavors, customBotInstructions] = await Promise.all([
+      getCachedIngredients(),
+      getCachedBlends(),
+      getCachedSweeteners(),
+      getCachedFlavors(),
+      getCachedBotInstructions()
     ]);
 
     const ingredientsPrompt = buildIngredientsPrompt(allBlends, allIngredients);
-    const customBotInstructions = botInstructionsResult.length > 0 ? botInstructionsResult[0].value : null;
     
     // Build sweetener list
     const inStockSweeteners = allSweeteners.filter(s => s.inStock !== false);
     const sweetenerList = inStockSweeteners.map(s => s.name).join(', ') || 'Stevia, Monk Fruit, Allulose, Erythritol';
 
-    // Fetch flavors for context
-    const allFlavors = await db.select().from(flavorsTable);
+    // Build flavor list from cache
     const inStockFlavors = allFlavors.filter(f => f.inStock !== false);
     const flavorList = inStockFlavors.map(f => f.name).join(', ') || 'Various flavors available';
 
@@ -1163,6 +1242,9 @@ app.put('/api/admin/settings/:key', requireAdmin, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Setting not found' });
     }
     
+    // Invalidate bot instructions cache
+    invalidateCache('botInstructions');
+    
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error updating setting:', error);
@@ -1223,6 +1305,7 @@ app.post('/api/admin/ingredients', requireAdmin, async (req, res) => {
       inStock: true
     }).returning();
 
+    invalidateCache('ingredients');
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error adding ingredient:', error);
@@ -1256,6 +1339,7 @@ app.put('/api/admin/ingredients/:id', requireAdmin, async (req, res) => {
       .where(eq(ingredientsTable.id, parseInt(id)))
       .returning();
 
+    invalidateCache('ingredients');
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error updating ingredient:', error);
@@ -1268,6 +1352,7 @@ app.delete('/api/admin/ingredients/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     await db.delete(ingredientsTable).where(eq(ingredientsTable.id, parseInt(id)));
+    invalidateCache('ingredients');
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting ingredient:', error);
@@ -1289,6 +1374,7 @@ app.post('/api/admin/flavors', requireAdmin, async (req, res) => {
       inStock: inStock !== false
     }).returning();
 
+    invalidateCache('flavors');
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error adding flavor:', error);
@@ -1307,6 +1393,7 @@ app.put('/api/admin/flavors/:id', requireAdmin, async (req, res) => {
       .where(eq(flavorsTable.id, parseInt(id)))
       .returning();
 
+    invalidateCache('flavors');
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error updating flavor:', error);
@@ -1319,6 +1406,7 @@ app.delete('/api/admin/flavors/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     await db.delete(flavorsTable).where(eq(flavorsTable.id, parseInt(id)));
+    invalidateCache('flavors');
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting flavor:', error);
@@ -1354,6 +1442,7 @@ app.post('/api/admin/sweeteners', requireAdmin, async (req, res) => {
       inStock: inStock !== false
     }).returning();
 
+    invalidateCache('sweeteners');
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error adding sweetener:', error);
@@ -1381,6 +1470,7 @@ app.put('/api/admin/sweeteners/:id', requireAdmin, async (req, res) => {
       .where(eq(sweetenersTable.id, parseInt(id)))
       .returning();
 
+    invalidateCache('sweeteners');
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error updating sweetener:', error);
@@ -1393,6 +1483,7 @@ app.delete('/api/admin/sweeteners/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     await db.delete(sweetenersTable).where(eq(sweetenersTable.id, parseInt(id)));
+    invalidateCache('sweeteners');
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting sweetener:', error);
@@ -1438,6 +1529,7 @@ app.post('/api/admin/blends', requireAdmin, async (req, res) => {
       name,
       displayOrder: nextOrder
     }).returning();
+    invalidateCache('blends');
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error adding blend:', error);
@@ -1460,6 +1552,7 @@ app.put('/api/admin/blends/:id', requireAdmin, async (req, res) => {
       .where(eq(blendsTable.id, parseInt(id)))
       .returning();
 
+    invalidateCache('blends');
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error updating blend:', error);
@@ -1488,6 +1581,7 @@ app.delete('/api/admin/blends/:id', requireAdmin, async (req, res) => {
     }
     
     await db.delete(blendsTable).where(eq(blendsTable.id, parseInt(id)));
+    invalidateCache('blends');
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting blend:', error);
@@ -1503,6 +1597,8 @@ app.use((req, res) => {
 app.listen(PORT, async () => {
   try {
     await seedDatabase();
+    // Pre-load cache on startup for faster first requests
+    await loadCache();
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📁 Serving frontend from: ${join(__dirname, 'dist')}`);
   } catch (error) {
